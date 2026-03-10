@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Gulf Region — Compound Risk Monitor</title>
+<title>Satellite Intelligence — Gulf Crisis + NZ Migration Monitor</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
@@ -65,7 +65,7 @@
 
   .card { background: var(--white); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
 
-  .summary-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .summary-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
   .stat-card { background: var(--white); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; }
   .stat-label { font-size: 10px; text-transform: uppercase; letter-spacing: .07em; color: var(--slate-lt); margin-bottom: 4px; }
   .stat-value { font-family: var(--font-mono); font-size: 22px; font-weight: 500; color: var(--navy); }
@@ -111,7 +111,14 @@
     padding: 4px 8px; background: var(--white); color: var(--text); cursor: pointer;
   }
   #nightlight-chart { height: 260px; }
+  #internet-chart { height: 260px; }
   #fire-map { height: 400px; border-radius: var(--radius); }
+
+  .status-operating { background: #38a169; color: #fff; }
+  .status-degraded  { background: #ed8936; color: #fff; }
+  .status-offline   { background: #718096; color: #fff; }
+  .status-damaged   { background: #c0392b; color: #fff; }
+  .status-unknown   { background: #a0aec0; color: #fff; }
 
   table { width: 100%; border-collapse: collapse; font-size: 12px; }
   th {
@@ -138,6 +145,25 @@
 
   .empty-state { color: var(--slate-lt); text-align: center; padding: 20px; font-size: 12px; }
 
+  .tab-bar {
+    display: flex; gap: 0; padding: 0 24px; background: var(--navy-lt);
+    border-bottom: 1px solid rgba(255,255,255,.1);
+  }
+  .tab-btn {
+    font-family: var(--font-sans); font-size: 12px; font-weight: 500;
+    color: #a0b0c8; background: none; border: none; border-bottom: 2px solid transparent;
+    padding: 10px 20px; cursor: pointer; letter-spacing: .02em;
+  }
+  .tab-btn:hover { color: #fff; }
+  .tab-btn.active { color: #fff; border-bottom-color: #fff; }
+  .tab-btn.nz-active { border-bottom-color: #0d9488; }
+  .tab-section { display: none; }
+  .tab-section.active { display: grid; }
+
+  .nz-teal { color: #0d9488; }
+  #nz-map { height: 380px; border-radius: var(--radius); }
+  #nz-pressure-chart { height: 260px; }
+
   @media (max-width: 900px) {
     .summary-row { grid-template-columns: 1fr 1fr; }
     .two-col { grid-template-columns: 1fr; }
@@ -161,7 +187,12 @@
 
 <div id="alert-banner" style="display:none" class="alert-banner"></div>
 
-<div class="main">
+<div class="tab-bar">
+  <button class="tab-btn active" onclick="switchTab('gulf')">Gulf Crisis Monitor</button>
+  <button class="tab-btn" onclick="switchTab('nz')">NZ Migration Signal</button>
+</div>
+
+<div class="main tab-section active" id="tab-gulf">
 
   <!-- Summary row -->
   <div class="summary-row">
@@ -184,6 +215,11 @@
       <div class="stat-label">Nightlight Data Points</div>
       <div class="stat-value green" id="stat-nl">—</div>
       <div class="stat-sub" id="stat-nl-sub">Latest — VNP46A2 / DNB</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Facilities Damaged</div>
+      <div class="stat-value red" id="stat-damaged">—</div>
+      <div class="stat-sub">Thermal signature analysis</div>
     </div>
   </div>
 
@@ -265,6 +301,76 @@
     </div>
   </div>
 
+  <!-- Internet Connectivity + Infrastructure Status -->
+  <div class="two-col">
+    <div class="card">
+      <div class="section-header">
+        <span class="section-title">Internet Connectivity</span>
+        <span class="section-meta">IODA / Google Transparency Report (0 = offline, 1 = normal)</span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Country</th>
+            <th style="text-align:right">Score</th>
+            <th style="text-align:right">Min</th>
+            <th style="text-align:right">vs Baseline</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="inet-tbody">
+          <tr><td colspan="5" class="empty-state">Loading…</td></tr>
+        </tbody>
+      </table>
+      <div style="margin-top:12px">
+        <div class="chart-controls">
+          <label for="inet-country-select">Country</label>
+          <select id="inet-country-select" class="ctrl-select"></select>
+        </div>
+        <div id="internet-chart"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="section-header">
+        <span class="section-title">Infrastructure Status</span>
+        <span class="section-meta">Thermal signature monitoring — desalination, oil, power, LNG</span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Facility</th>
+            <th>Type</th>
+            <th>Status</th>
+            <th style="text-align:right">Fires</th>
+            <th style="text-align:right">Max FRP</th>
+          </tr>
+        </thead>
+        <tbody id="infra-tbody">
+          <tr><td colspan="5" class="empty-state">Loading…</td></tr>
+        </tbody>
+      </table>
+      <div style="margin-top:12px">
+        <div class="section-header">
+          <span class="section-title" style="font-size:10px">Damage Detected</span>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Facility</th>
+              <th>Date</th>
+              <th style="text-align:right">Fires</th>
+              <th style="text-align:right">Max FRP</th>
+            </tr>
+          </thead>
+          <tbody id="damage-tbody">
+            <tr><td colspan="4" class="empty-state">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
   <!-- Recent fires table -->
   <div class="card">
     <div class="section-header">
@@ -290,8 +396,111 @@
 
 </div>
 
+<!-- NZ Migration Signal Tab -->
+<div class="main tab-section" id="tab-nz">
+
+  <div class="summary-row" style="grid-template-columns: repeat(4, 1fr);">
+    <div class="stat-card">
+      <div class="stat-label">Marina Observations</div>
+      <div class="stat-value nz-teal" id="nz-stat-marina">—</div>
+      <div class="stat-sub">Sentinel-2 + SAR</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Airport Observations</div>
+      <div class="stat-value nz-teal" id="nz-stat-airport">—</div>
+      <div class="stat-sub">Sentinel-2 bright-object</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">SAR Detections</div>
+      <div class="stat-value amber" id="nz-stat-sar">—</div>
+      <div class="stat-sub">Approach + marina</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Migration Indicators</div>
+      <div class="stat-value" id="nz-stat-mig">—</div>
+      <div class="stat-sub">NZ locations tracked</div>
+    </div>
+  </div>
+
+  <!-- Migration Pressure Indicators -->
+  <div>
+    <div class="section-header">
+      <span class="section-title">Migration Pressure Indicators</span>
+      <span class="section-meta">Weighted: marina 25% &bull; airport 25% &bull; nightlight 15% &bull; SAR 15% &bull; Gulf push 20%</span>
+    </div>
+    <div class="risk-grid" id="nz-pressure-grid">
+      <p class="empty-state" style="grid-column:1/-1">Loading NZ migration data…</p>
+    </div>
+  </div>
+
+  <!-- NZ Map + Pressure Chart -->
+  <div class="two-col">
+    <div class="card">
+      <div class="section-header">
+        <span class="section-title">NZ Monitoring Locations</span>
+        <span class="section-meta">Marinas, airports, approaches</span>
+      </div>
+      <div id="nz-map"></div>
+    </div>
+    <div class="card">
+      <div class="section-header">
+        <span class="section-title">Nighttime Radiance — NZ</span>
+        <span class="section-meta">Auckland &amp; Queenstown activity proxy</span>
+      </div>
+      <div class="chart-controls">
+        <label for="nz-city-select">Location</label>
+        <select id="nz-city-select" class="ctrl-select"></select>
+      </div>
+      <div id="nz-pressure-chart"></div>
+    </div>
+  </div>
+
+  <!-- Marina + Airport tables -->
+  <div class="two-col">
+    <div class="card">
+      <div class="section-header">
+        <span class="section-title">Marina Vessel Counts</span>
+        <span class="section-meta">Sentinel-2 bright-object detection</span>
+      </div>
+      <table>
+        <thead><tr><th>Marina</th><th>Date</th><th style="text-align:right">Count</th><th style="text-align:right">Baseline</th><th style="text-align:right">Change</th></tr></thead>
+        <tbody id="nz-marina-tbody">
+          <tr><td colspan="5" class="empty-state">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="card">
+      <div class="section-header">
+        <span class="section-title">Airport Aircraft Counts</span>
+        <span class="section-meta">Sentinel-2 apron monitoring</span>
+      </div>
+      <table>
+        <thead><tr><th>Airport</th><th>Date</th><th style="text-align:right">Count</th><th style="text-align:right">Baseline</th><th style="text-align:right">Change</th></tr></thead>
+        <tbody id="nz-airport-tbody">
+          <tr><td colspan="5" class="empty-state">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- NZ SAR table -->
+  <div class="card">
+    <div class="section-header">
+      <span class="section-title">SAR Vessel Detections — NZ</span>
+      <span class="section-meta">Sentinel-1 SAR — approaches &amp; marinas</span>
+    </div>
+    <table>
+      <thead><tr><th>Location</th><th>Date</th><th style="text-align:right">Vessels</th><th style="text-align:right">Baseline</th><th style="text-align:right">Change</th><th style="text-align:right">Coverage</th></tr></thead>
+      <tbody id="nz-sar-tbody">
+        <tr><td colspan="6" class="empty-state">Loading…</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+
 <footer class="footer">
-  <span>Data: NASA FIRMS &bull; NASA Black Marble VNP46A2 &bull; VIIRS DNB L1B &bull; Sentinel-1 SAR via ASF DAAC &bull; Open-source humanitarian monitoring</span>
+  <span>Data: NASA FIRMS &bull; NASA Black Marble VNP46A2 &bull; VIIRS DNB L1B &bull; Sentinel-1 SAR via ASF DAAC &bull; IODA / Georgia Tech &bull; Open-source humanitarian monitoring</span>
   <span id="footer-right">Baseline period: 15 Jan – 27 Feb 2026</span>
 </footer>
 
@@ -671,6 +880,151 @@ function initCitySelect(cities) {
   if (cities.length) { sel.value = cities[0]; renderNightlightChart(cities[0]); }
 }
 
+// ── internet connectivity table ──────────────────────────────────────────────
+var inetData = {};
+
+function renderInternetTable(data) {
+  var tbody = document.getElementById('inet-tbody');
+  tbody.textContent = '';
+  var countries = Object.keys(data).sort();
+  if (!countries.length) {
+    var row = el('tr');
+    row.appendChild(el('td', { colspan: '5', class: 'empty-state' }, 'No internet connectivity data.'));
+    tbody.appendChild(row);
+    return;
+  }
+
+  // Latest observation per country, sorted by pct_change
+  var rows = countries.map(function (c) {
+    var series = data[c];
+    var latest = series[series.length - 1] || {};
+    return { country: c, latest: latest };
+  }).sort(function (a, b) {
+    return (a.latest.pct_change || 0) - (b.latest.pct_change || 0);
+  });
+
+  rows.forEach(function (r) {
+    var tr = el('tr');
+    tr.appendChild(el('td', { style: 'font-weight:500' }, r.country));
+    tr.appendChild(el('td', { class: 'mono', style: 'text-align:right' },
+      r.latest.connectivity != null ? r.latest.connectivity.toFixed(3) : '—'));
+    tr.appendChild(el('td', { class: 'mono', style: 'text-align:right' },
+      r.latest.min_connectivity != null ? r.latest.min_connectivity.toFixed(3) : '—'));
+
+    var pctTd = el('td', { class: 'mono', style: 'text-align:right' });
+    pctTd.appendChild(pctSpan(r.latest.pct_change));
+    tr.appendChild(pctTd);
+
+    var conn = r.latest.connectivity;
+    var statusText = conn == null ? 'Unknown' : conn >= 0.8 ? 'Normal' : conn >= 0.5 ? 'Degraded' : conn >= 0.2 ? 'Severe' : 'Blackout';
+    var statusClass = conn == null ? 'status-unknown' : conn >= 0.8 ? 'status-operating' : conn >= 0.5 ? 'status-degraded' : 'status-damaged';
+    var statusTd = el('td');
+    statusTd.appendChild(el('span', { class: 'badge ' + statusClass }, statusText));
+    tr.appendChild(statusTd);
+    tbody.appendChild(tr);
+  });
+}
+
+function renderInternetChart(countryName) {
+  var series = inetData[countryName];
+  if (!series || !series.length) {
+    var e = document.getElementById('internet-chart');
+    e.textContent = 'No data for this country.';
+    e.style.cssText = 'color:#718096;font-size:11px;padding:20px;';
+    return;
+  }
+
+  var dates = series.map(function (d) { return d.date; });
+  var conn = series.map(function (d) { return d.connectivity; });
+  var baseline = series.map(function (d) { return d.baseline; });
+
+  var traces = [
+    { x: dates, y: conn, type: 'scatter', mode: 'lines+markers', name: 'Connectivity',
+      line: { color: '#2b6cb0', width: 2 }, marker: { size: 4 } },
+  ];
+  if (baseline[0] != null) {
+    traces.push({ x: dates, y: baseline, type: 'scatter', mode: 'lines', name: 'Baseline',
+      line: { color: '#718096', width: 1, dash: 'dot' } });
+  }
+
+  Plotly.newPlot('internet-chart', traces, {
+    margin: { t: 10, r: 30, b: 40, l: 50 },
+    font: { family: 'Inter, system-ui, sans-serif', size: 11, color: '#4a5568' },
+    paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
+    legend: { x: 0, y: 1.1, orientation: 'h', font: { size: 10 } },
+    xaxis: { showgrid: false, tickfont: { size: 10 } },
+    yaxis: { title: 'Connectivity (0-1)', range: [0, 1.05], showgrid: true, gridcolor: '#edf2f7', titlefont: { size: 10 } },
+  }, { responsive: true, displayModeBar: false });
+}
+
+function initInetSelect(countries) {
+  var sel = document.getElementById('inet-country-select');
+  countries.forEach(function (c) {
+    var opt = document.createElement('option');
+    opt.value = c; opt.textContent = c; sel.appendChild(opt);
+  });
+  sel.addEventListener('change', function () { renderInternetChart(this.value); });
+  if (countries.length) { sel.value = countries[0]; renderInternetChart(countries[0]); }
+}
+
+// ── infrastructure status table ──────────────────────────────────────────────
+function renderInfraTable(data) {
+  var tbody = document.getElementById('infra-tbody');
+  var damageTbody = document.getElementById('damage-tbody');
+  tbody.textContent = '';
+  damageTbody.textContent = '';
+
+  var facilities = Object.keys(data).sort();
+  if (!facilities.length) {
+    tbody.appendChild(el('tr')).appendChild(el('td', { colspan: '5', class: 'empty-state' }, 'No thermal signature data.'));
+    damageTbody.appendChild(el('tr')).appendChild(el('td', { colspan: '4', class: 'empty-state' }, 'No damage detected.'));
+    return;
+  }
+
+  var damageCount = 0;
+
+  facilities.forEach(function (name) {
+    var series = data[name];
+    var latest = series[series.length - 1] || {};
+
+    var tr = el('tr');
+    tr.appendChild(el('td', { style: 'font-weight:500' }, name.length > 25 ? name.slice(0, 25) + '\u2026' : name));
+    tr.appendChild(el('td', { style: 'font-size:11px;color:var(--slate-lt)' }, latest.profile || ''));
+
+    var statusTd = el('td');
+    statusTd.appendChild(el('span', { class: 'badge status-' + (latest.status || 'unknown') },
+      (latest.status || 'unknown').toUpperCase()));
+    tr.appendChild(statusTd);
+
+    tr.appendChild(el('td', { class: 'mono', style: 'text-align:right' }, String(latest.fire_count || 0)));
+    tr.appendChild(el('td', { class: 'mono', style: 'text-align:right' },
+      latest.max_frp != null ? latest.max_frp.toFixed(1) : '—'));
+    tbody.appendChild(tr);
+
+    // Collect damage events
+    series.forEach(function (s) {
+      if (s.damage) {
+        damageCount++;
+        var dr = el('tr');
+        dr.appendChild(el('td', { style: 'font-weight:500;color:var(--red)' }, name.length > 25 ? name.slice(0, 25) + '\u2026' : name));
+        dr.appendChild(el('td', { class: 'mono' }, s.date));
+        dr.appendChild(el('td', { class: 'mono', style: 'text-align:right' }, String(s.fire_count || 0)));
+        dr.appendChild(el('td', { class: 'mono', style: 'text-align:right;color:var(--red);font-weight:600' },
+          s.max_frp != null ? s.max_frp.toFixed(1) : '—'));
+        damageTbody.appendChild(dr);
+      }
+    });
+  });
+
+  setText('stat-damaged', String(damageCount));
+
+  if (damageCount === 0) {
+    var row = el('tr');
+    row.appendChild(el('td', { colspan: '4', class: 'empty-state' }, 'No damage events detected.'));
+    damageTbody.appendChild(row);
+  }
+}
+
 // ── main ──────────────────────────────────────────────────────────────────────
 Promise.all([
   load(DATA + '/nightlights.json'),
@@ -679,14 +1033,22 @@ Promise.all([
   load(DATA + '/fires_geojson.json'),
   load(DATA + '/fires_infra.json'),
   load(DATA + '/meta.json'),
+  load(DATA + '/internet.json').catch(function () { return {}; }),
+  load(DATA + '/thermal_signatures.json').catch(function () { return {}; }),
 ]).then(function (results) {
   var nl = results[0], risk = results[1], sar = results[2],
-      fireGeo = results[3], infraFires = results[4], meta = results[5];
+      fireGeo = results[3], infraFires = results[4], meta = results[5],
+      inet = results[6], thermalSigs = results[7];
 
   // Build per-city data structure for chart
   Object.keys(nl).forEach(function (city) {
     var series = nl[city];
     nlData[city] = series;
+  });
+
+  // Build internet data for chart
+  Object.keys(inet).forEach(function (country) {
+    inetData[country] = inet[country];
   });
 
   if (meta.generated_at) {
@@ -700,6 +1062,9 @@ Promise.all([
   renderVesselTable(sar);
   renderMap(fireGeo);
   renderFireTable(infraFires);
+  renderInternetTable(inet);
+  initInetSelect(Object.keys(inet).sort());
+  renderInfraTable(thermalSigs);
 
 }).catch(function (err) {
   console.error(err);
@@ -709,7 +1074,265 @@ Promise.all([
   banner.textContent = 'Data load error: ' + err.message + ' \u2014 check that ./data/ JSON files exist.';
 });
 
+// ── NZ data ──────────────────────────────────────────────────────────────────
+var nzMapInitialised = false;
+var nzNlData = {};
+
+load(DATA + '/nz.json').then(function (nz) {
+  renderNZAssetTable(nz.asset_counts, 'marina', 'vessel', 'nz-marina-tbody');
+  renderNZAssetTable(nz.asset_counts, 'airport', 'aircraft', 'nz-airport-tbody');
+  renderNZSarTable(nz.sar);
+  renderNZPressureGrid(nz.migration_pressure);
+
+  // Build NZ nightlight data
+  var cities = Object.keys(nz.nightlights).sort();
+  cities.forEach(function (c) { nzNlData[c] = nz.nightlights[c]; });
+  initNZCitySelect(cities);
+
+  // Stats
+  var marinaCount = 0, airportCount = 0;
+  Object.values(nz.asset_counts).forEach(function (series) {
+    series.forEach(function (s) {
+      if (s.category === 'marina') marinaCount++;
+      else if (s.category === 'airport') airportCount++;
+    });
+  });
+  setText('nz-stat-marina', String(marinaCount));
+  setText('nz-stat-airport', String(airportCount));
+  var sarCount = 0;
+  Object.values(nz.sar).forEach(function (s) { sarCount += s.length; });
+  setText('nz-stat-sar', String(sarCount));
+  setText('nz-stat-mig', String(Object.keys(nz.migration_pressure).length));
+}).catch(function () {
+  // NZ data not available yet — leave loading placeholders
+});
+
+function renderNZAssetTable(assets, category, assetType, tbodyId) {
+  var tbody = document.getElementById(tbodyId);
+  tbody.textContent = '';
+
+  var rows = [];
+  Object.keys(assets).sort().forEach(function (name) {
+    var series = assets[name].filter(function (s) { return s.category === category && s.asset_type === assetType; });
+    if (series.length) {
+      var latest = series[series.length - 1];
+      rows.push({ name: name, latest: latest });
+    }
+  });
+
+  if (!rows.length) {
+    var r = el('tr');
+    r.appendChild(el('td', { colspan: '5', class: 'empty-state' }, 'No ' + category + ' data yet.'));
+    tbody.appendChild(r);
+    return;
+  }
+
+  rows.forEach(function (r) {
+    var tr = el('tr');
+    tr.appendChild(el('td', { style: 'font-weight:500' }, r.name));
+    tr.appendChild(el('td', { class: 'mono', style: 'color:var(--slate-lt)' }, r.latest.date));
+    tr.appendChild(el('td', { class: 'mono', style: 'text-align:right' }, String(r.latest.count)));
+    tr.appendChild(el('td', { class: 'mono', style: 'text-align:right' }, r.latest.baseline != null ? r.latest.baseline.toFixed(0) : '\u2014'));
+    var pctTd = el('td', { class: 'mono', style: 'text-align:right' });
+    pctTd.appendChild(pctSpan(r.latest.pct_change));
+    tr.appendChild(pctTd);
+    tbody.appendChild(tr);
+  });
+}
+
+function renderNZSarTable(sarData) {
+  var tbody = document.getElementById('nz-sar-tbody');
+  tbody.textContent = '';
+
+  var entries = Object.entries(sarData);
+  if (!entries.length) {
+    var r = el('tr');
+    r.appendChild(el('td', { colspan: '6', class: 'empty-state' }, 'No SAR data for NZ yet.'));
+    tbody.appendChild(r);
+    return;
+  }
+
+  entries.forEach(function (entry) {
+    var name = entry[0], records = entry[1];
+    var latest = records[records.length - 1];
+    var tr = el('tr');
+    tr.appendChild(el('td', { style: 'font-weight:500' }, name));
+    tr.appendChild(el('td', { class: 'mono', style: 'color:var(--slate-lt)' }, latest.date));
+    tr.appendChild(el('td', { class: 'mono', style: 'text-align:right' }, String(latest.vessel_count)));
+    tr.appendChild(el('td', { class: 'mono', style: 'text-align:right' }, latest.baseline != null ? latest.baseline.toFixed(0) : '\u2014'));
+    var pctTd = el('td', { class: 'mono', style: 'text-align:right' });
+    pctTd.appendChild(pctSpan(latest.pct_change));
+    tr.appendChild(pctTd);
+    tr.appendChild(el('td', { class: 'mono', style: 'text-align:right' }, latest.coverage != null ? (latest.coverage * 100).toFixed(0) + '%' : '\u2014'));
+    tbody.appendChild(tr);
+  });
+}
+
+function renderNZPressureGrid(migData) {
+  var grid = document.getElementById('nz-pressure-grid');
+  grid.textContent = '';
+
+  var cities = Object.keys(migData);
+  if (!cities.length) {
+    grid.appendChild(el('p', { class: 'empty-state', style: 'grid-column:1/-1' },
+      'No migration pressure data yet. Run calculate_migration_pressure task to populate.'));
+    return;
+  }
+
+  cities.sort().forEach(function (city) {
+    var series = migData[city];
+    var latest = series[series.length - 1];
+    var level = latest.level || 'baseline';
+    var levelMap = { surge: 'emergency', high: 'high', elevated: 'elevated', baseline: 'normal' };
+    var badgeClass = levelMap[level] || 'normal';
+
+    var card = el('div', { class: 'risk-card ' + (level === 'surge' ? 'emergency' : level) });
+    var header = el('div', { class: 'risk-card-header' });
+    var nameWrap = el('div');
+    nameWrap.appendChild(el('div', { class: 'risk-city' }, city));
+    nameWrap.appendChild(el('div', { class: 'risk-country' }, 'New Zealand'));
+    header.appendChild(nameWrap);
+    header.appendChild(el('span', { class: 'badge badge-' + badgeClass }, level));
+    card.appendChild(header);
+
+    card.appendChild(el('div', { class: 'risk-score' }, latest.pressure.toFixed(3)));
+
+    var track = el('div', { class: 'progress-track' });
+    var fillColor = latest.pressure >= 0.7 ? '#c0392b' : latest.pressure >= 0.4 ? '#ed8936' : latest.pressure >= 0.2 ? '#3182ce' : '#38a169';
+    var fill = el('div', { class: 'progress-fill' });
+    fill.style.width = Math.min(100, latest.pressure * 100).toFixed(1) + '%';
+    fill.style.background = fillColor;
+    track.appendChild(fill);
+    card.appendChild(track);
+
+    var subs = el('div', { class: 'sub-scores' });
+    [['Marina', latest.marina], ['Airport', latest.airport], ['Lights', latest.nightlight], ['SAR', latest.sar], ['Gulf', latest.gulf_push]]
+      .forEach(function (pair) {
+        var item = el('div', { class: 'sub-score-item' });
+        item.appendChild(el('div', { class: 'sub-score-label' }, pair[0]));
+        item.appendChild(el('div', { class: 'sub-score-val' }, pair[1].toFixed(2)));
+        subs.appendChild(item);
+      });
+    card.appendChild(subs);
+    grid.appendChild(card);
+  });
+}
+
+function renderNZNightlightChart(cityName) {
+  var series = nzNlData[cityName];
+  if (!series || !series.length) {
+    var e = document.getElementById('nz-pressure-chart');
+    e.textContent = 'No data for this location.';
+    e.style.cssText = 'color:#718096;font-size:11px;padding:20px;';
+    return;
+  }
+
+  var dates = series.map(function (d) { return d.date; });
+  var radiance = series.map(function (d) { return d.radiance; });
+  var pct = series.map(function (d) { return d.pct_change; });
+
+  var colors = pct.map(function (v) {
+    return v == null ? '#a0aec0' : v > 20 ? '#0d9488' : v > 0 ? '#38a169' : v > -20 ? '#ed8936' : '#c0392b';
+  });
+
+  Plotly.newPlot('nz-pressure-chart', [
+    { x: dates, y: radiance, type: 'scatter', mode: 'lines+markers', name: 'Radiance',
+      line: { color: '#0d9488', width: 2 }, marker: { size: 4 }, yaxis: 'y1' },
+    { x: dates, y: pct, type: 'bar', name: '% vs baseline',
+      marker: { color: colors, opacity: 0.6 }, yaxis: 'y2' },
+  ], {
+    margin: { t: 10, r: 60, b: 40, l: 60 },
+    font: { family: 'Inter, system-ui, sans-serif', size: 11, color: '#4a5568' },
+    paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
+    legend: { x: 0, y: 1.1, orientation: 'h', font: { size: 10 } },
+    xaxis: { showgrid: false, tickfont: { size: 10 } },
+    yaxis: { title: 'Radiance', showgrid: true, gridcolor: '#edf2f7', titlefont: { size: 10 } },
+    yaxis2: { title: '% Change', overlaying: 'y', side: 'right', showgrid: false, titlefont: { size: 10 } },
+  }, { responsive: true, displayModeBar: false });
+}
+
+function initNZCitySelect(cities) {
+  var sel = document.getElementById('nz-city-select');
+  cities.forEach(function (c) {
+    var opt = document.createElement('option');
+    opt.value = c; opt.textContent = c; sel.appendChild(opt);
+  });
+  sel.addEventListener('change', function () { renderNZNightlightChart(this.value); });
+  if (cities.length) { sel.value = cities[0]; renderNZNightlightChart(cities[0]); }
+}
+
 }());
+
+// ── tab switching (outside IIFE) ─────────────────────────────────────────────
+function switchTab(tab) {
+  document.querySelectorAll('.tab-section').forEach(function (s) { s.classList.remove('active'); });
+  document.querySelectorAll('.tab-btn').forEach(function (b) { b.classList.remove('active', 'nz-active'); });
+
+  var section = document.getElementById('tab-' + tab);
+  if (section) section.classList.add('active');
+
+  var btns = document.querySelectorAll('.tab-btn');
+  btns.forEach(function (b) {
+    if (b.textContent.toLowerCase().indexOf(tab === 'gulf' ? 'gulf' : 'nz') >= 0) {
+      b.classList.add('active');
+      if (tab === 'nz') b.classList.add('nz-active');
+    }
+  });
+
+  // Initialise NZ map on first switch (Leaflet needs visible container)
+  if (tab === 'nz' && !window._nzMapInit) {
+    window._nzMapInit = true;
+    setTimeout(function () {
+      var map = L.map('nz-map', { center: [-38.5, 174], zoom: 5 });
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+        attribution: '\u00a9 OpenStreetMap \u00a9 CARTO', maxZoom: 18,
+      }).addTo(map);
+
+      var sites = [
+        { name: 'Viaduct Harbour', lat: -36.8435, lon: 174.7594, type: 'marina', color: '#0d9488' },
+        { name: 'Westhaven Marina', lat: -36.8380, lon: 174.7490, type: 'marina', color: '#0d9488' },
+        { name: 'Silo Marina', lat: -36.8410, lon: 174.7570, type: 'marina', color: '#0d9488' },
+        { name: 'Half Moon Bay', lat: -36.8880, lon: 174.8980, type: 'marina', color: '#0d9488' },
+        { name: 'Queenstown Marina', lat: -45.0310, lon: 168.6570, type: 'marina', color: '#0d9488' },
+        { name: 'Auckland GA Apron', lat: -37.0082, lon: 174.7850, type: 'airport', color: '#b7791f' },
+        { name: 'Queenstown Airport', lat: -45.0211, lon: 168.7392, type: 'airport', color: '#b7791f' },
+        { name: 'Wanaka Airport', lat: -44.7222, lon: 169.2456, type: 'airport', color: '#b7791f' },
+      ];
+
+      sites.forEach(function (s) {
+        L.circleMarker([s.lat, s.lon], {
+          radius: 7, fillColor: s.color, color: s.color, weight: 1, opacity: 0.9, fillOpacity: 0.6,
+        }).bindPopup(L.popup().setContent(document.createTextNode(s.name + ' \u2014 ' + s.type))).addTo(map);
+      });
+
+      L.rectangle([[-35.5, 172.0], [-34.0, 177.0]], { color: '#3182ce', weight: 1, fillOpacity: 0.08, dashArray: '5,5' })
+        .bindPopup(L.popup().setContent(document.createTextNode('NZ North Approach'))).addTo(map);
+      L.rectangle([[-38.0, 177.0], [-35.0, 180.0]], { color: '#3182ce', weight: 1, fillOpacity: 0.08, dashArray: '5,5' })
+        .bindPopup(L.popup().setContent(document.createTextNode('NZ East Approach'))).addTo(map);
+
+      var legend = L.control({ position: 'bottomright' });
+      legend.onAdd = function () {
+        var div = L.DomUtil.create('div');
+        div.style.cssText = 'background:#fff;padding:10px 12px;border:1px solid #d1d9e0;border-radius:3px;font-size:11px;font-family:Inter,sans-serif;line-height:1.7';
+        var heading = document.createElement('div');
+        heading.textContent = 'Legend';
+        heading.style.cssText = 'font-weight:600;margin-bottom:4px;color:#1a2744';
+        div.appendChild(heading);
+        [['#0d9488','Marina'],['#b7791f','Airport'],['#3182ce','Approach zone']].forEach(function (r) {
+          var d = document.createElement('div');
+          var dot = document.createElement('span');
+          dot.textContent = '\u25cf ';
+          dot.style.color = r[0];
+          d.appendChild(dot);
+          d.appendChild(document.createTextNode(r[1]));
+          div.appendChild(d);
+        });
+        return div;
+      };
+      legend.addTo(map);
+    }, 100);
+  }
+}
 </script>
 </body>
 </html>

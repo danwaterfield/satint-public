@@ -22,9 +22,13 @@ from django.db.models import Avg, Count, Max, Min, Sum
 from pipeline.models import (
     AreaOfInterest,
     CompoundRiskIndicator,
+    InternetOutage,
+    MigrationPressureIndicator,
     NightlightObservation,
+    OpticalAssetCount,
     SARVesselDetection,
     ThermalAnomaly,
+    ThermalSignature,
 )
 
 
@@ -58,6 +62,9 @@ class Command(BaseCommand):
         self._export_fires_infra(out_dir, cutoff)
         self._export_sar(out_dir)
         self._export_compound_risk(out_dir)
+        self._export_internet(out_dir)
+        self._export_thermal_signatures(out_dir)
+        self._export_nz(out_dir)
 
         self.stdout.write(self.style.SUCCESS(f"Export complete → {out_dir}/"))
 
@@ -277,3 +284,146 @@ class Command(BaseCommand):
             })
 
         self._write(os.path.join(out_dir, "sar.json"), result)
+
+    def _export_internet(self, out_dir):
+        """Internet connectivity time series per country."""
+        observations = (
+            InternetOutage.objects.all()
+            .order_by("country", "date")
+            .values("country", "date", "ioda_bgp", "ioda_active_probing",
+                    "overall_connectivity", "baseline_connectivity", "pct_change")
+        )
+
+        from collections import defaultdict
+        countries = defaultdict(list)
+        for o in observations:
+            countries[o["country"]].append({
+                "date": str(o["date"]),
+                "connectivity": round(o["overall_connectivity"], 3) if o["overall_connectivity"] is not None else None,
+                "min_connectivity": round(o["ioda_active_probing"], 3) if o["ioda_active_probing"] is not None else None,
+                "baseline": round(o["baseline_connectivity"], 3) if o["baseline_connectivity"] is not None else None,
+                "pct_change": round(o["pct_change"], 1) if o["pct_change"] is not None else None,
+            })
+
+        self._write(os.path.join(out_dir, "internet.json"), dict(sorted(countries.items())))
+
+    def _export_thermal_signatures(self, out_dir):
+        """Infrastructure thermal signature status."""
+        sigs = (
+            ThermalSignature.objects.all()
+            .select_related("aoi")
+            .order_by("aoi__name", "date")
+            .values("aoi__name", "aoi__country", "date", "facility_profile",
+                    "signature_present", "damage_detected", "max_frp",
+                    "fire_count", "baseline_fire_count", "status")
+        )
+
+        from collections import defaultdict
+        facilities = defaultdict(list)
+        for s in sigs:
+            facilities[s["aoi__name"]].append({
+                "date": str(s["date"]),
+                "country": s["aoi__country"],
+                "profile": s["facility_profile"],
+                "status": s["status"],
+                "damage": s["damage_detected"],
+                "fire_count": s["fire_count"],
+                "max_frp": round(s["max_frp"], 1) if s["max_frp"] is not None else None,
+                "baseline_fires": round(s["baseline_fire_count"], 1) if s["baseline_fire_count"] is not None else None,
+            })
+
+        self._write(os.path.join(out_dir, "thermal_signatures.json"), dict(sorted(facilities.items())))
+
+    def _export_nz(self, out_dir):
+        """NZ migration signal detection data — asset counts, SAR, migration pressure, nightlights."""
+        from collections import defaultdict
+
+        # Optical asset counts (marina vessels + airport aircraft)
+        asset_counts = (
+            OpticalAssetCount.objects.filter(aoi__country="New Zealand")
+            .select_related("aoi")
+            .order_by("aoi__name", "date")
+            .values("aoi__name", "aoi__category", "date", "asset_type",
+                    "count", "baseline_count", "pct_change", "cloud_fraction")
+        )
+
+        assets = defaultdict(list)
+        for a in asset_counts:
+            key = a["aoi__name"]
+            assets[key].append({
+                "date": str(a["date"]),
+                "category": a["aoi__category"],
+                "asset_type": a["asset_type"],
+                "count": a["count"],
+                "baseline": round(a["baseline_count"], 1) if a["baseline_count"] is not None else None,
+                "pct_change": round(a["pct_change"], 1) if a["pct_change"] is not None else None,
+                "cloud_fraction": round(a["cloud_fraction"], 2) if a["cloud_fraction"] is not None else None,
+            })
+
+        # NZ SAR vessel detections
+        nz_sar = (
+            SARVesselDetection.objects.filter(chokepoint__country="New Zealand")
+            .select_related("chokepoint")
+            .order_by("chokepoint__name", "date")
+            .values("chokepoint__name", "date", "vessel_count",
+                    "baseline_count", "pct_change", "scene_coverage")
+        )
+
+        sar = defaultdict(list)
+        for s in nz_sar:
+            sar[s["chokepoint__name"]].append({
+                "date": str(s["date"]),
+                "vessel_count": s["vessel_count"],
+                "baseline": round(s["baseline_count"], 1) if s["baseline_count"] is not None else None,
+                "pct_change": round(s["pct_change"], 1) if s["pct_change"] is not None else None,
+                "coverage": round(s["scene_coverage"], 2) if s["scene_coverage"] is not None else None,
+            })
+
+        # Migration pressure indicators
+        pressure = (
+            MigrationPressureIndicator.objects.all()
+            .select_related("aoi")
+            .order_by("aoi__name", "date")
+            .values("aoi__name", "date", "migration_pressure", "pressure_level",
+                    "marina_score", "airport_score", "nightlight_score",
+                    "sar_vessel_score", "gulf_push_score")
+        )
+
+        migration = defaultdict(list)
+        for p in pressure:
+            migration[p["aoi__name"]].append({
+                "date": str(p["date"]),
+                "pressure": round(p["migration_pressure"], 4),
+                "level": p["pressure_level"],
+                "marina": round(p["marina_score"], 3),
+                "airport": round(p["airport_score"], 3),
+                "nightlight": round(p["nightlight_score"], 3),
+                "sar": round(p["sar_vessel_score"], 3),
+                "gulf_push": round(p["gulf_push_score"], 3),
+            })
+
+        # NZ nightlights
+        nz_nl = (
+            NightlightObservation.objects.filter(aoi__country="New Zealand")
+            .select_related("aoi")
+            .order_by("aoi__name", "date")
+            .values("aoi__name", "date", "mean_radiance", "pct_change", "source")
+        )
+
+        nightlights = defaultdict(list)
+        for n in nz_nl:
+            nightlights[n["aoi__name"]].append({
+                "date": str(n["date"]),
+                "radiance": round(n["mean_radiance"], 3) if n["mean_radiance"] is not None else None,
+                "pct_change": round(n["pct_change"], 1) if n["pct_change"] is not None else None,
+                "source": n["source"],
+            })
+
+        result = {
+            "asset_counts": dict(sorted(assets.items())),
+            "sar": dict(sorted(sar.items())),
+            "migration_pressure": dict(sorted(migration.items())),
+            "nightlights": dict(sorted(nightlights.items())),
+        }
+
+        self._write(os.path.join(out_dir, "nz.json"), result)
