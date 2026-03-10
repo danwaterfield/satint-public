@@ -1,0 +1,34 @@
+# Environment / credentials — NEVER commit
+.env
+.env.*
+!.env.example
+*.netrc
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+satint/           # virtualenv
+*.egg-info/
+
+# Django
+staticfiles/
+media/
+
+# Data / downloads (large files, keep local only)
+/tmp/
+satint_backup.dump
+*.h5
+*.hdf5
+*.zip
+*.SAFE/
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Playwright
+.playwright-mcp/

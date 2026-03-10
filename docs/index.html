@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gulf Compound Crisis Monitor — Satellite Intelligence</title>
+<meta name="description" content="Open-source satellite intelligence tracking second and third-order effects of the 2026 Gulf conflict: nightlights, fire activity, maritime traffic.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@300;400;600;700;900&family=Barlow:wght@300;400&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<!-- DOMPurify for safe innerHTML -->
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+<style>
+:root {
+  --bg:#080c0e;--bg2:#0d1417;--bg3:#111920;
+  --border:#1e2d35;--border2:#2a3f4a;
+  --amber:#e8a030;--amber-dim:#7a4e10;
+  --red:#c84040;--red-dim:#5a1818;
+  --green:#2ab87a;--green-dim:#0d4028;
+  --cyan:#30a8c8;--cyan-dim:#0d3a48;
+  --text:#c8d8e0;--text-dim:#586878;--text-muted:#3a4e58;
+  --mono:'Share Tech Mono',monospace;
+  --sans:'Barlow Condensed',sans-serif;
+  --body:'Barlow',sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:var(--body);font-size:15px;line-height:1.5;overflow-x:hidden}
+body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.04) 2px,rgba(0,0,0,.04) 4px);pointer-events:none;z-index:9999}
+.banner{background:var(--red);color:#fff;text-align:center;font-family:var(--mono);font-size:11px;letter-spacing:.3em;padding:6px;position:sticky;top:0;z-index:1000}
+header{border-bottom:1px solid var(--border);padding:32px 40px 28px;display:grid;grid-template-columns:1fr auto;gap:24px;align-items:end;background:linear-gradient(180deg,#0a1318 0%,var(--bg) 100%)}
+.header-kicker{font-family:var(--mono);font-size:10px;color:var(--amber);letter-spacing:.25em;text-transform:uppercase;margin-bottom:6px}
+h1{font-family:var(--sans);font-size:clamp(28px,4vw,52px);font-weight:900;letter-spacing:-.01em;line-height:1;color:#fff}
+h1 span{color:var(--amber)}
+.header-sub{font-size:13px;color:var(--text-dim);margin-top:4px;max-width:540px}
+.header-meta{text-align:right;font-family:var(--mono);font-size:10px;color:var(--text-dim);line-height:1.8}
+.meta-value{color:var(--cyan)}
+.alert-strip{background:linear-gradient(90deg,var(--red-dim),transparent 60%);border-top:1px solid var(--red);border-bottom:1px solid var(--border);padding:10px 40px;display:flex;align-items:center;gap:16px;font-family:var(--mono);font-size:11px}
+.alert-dot{width:8px;height:8px;border-radius:50%;background:var(--red);animation:pulse 1.5s ease-in-out infinite;flex-shrink:0}
+@keyframes pulse{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(200,64,64,.6)}50%{opacity:.7;box-shadow:0 0 0 6px rgba(200,64,64,0)}}
+.alert-text{color:var(--text);letter-spacing:.05em}
+.alert-text strong{color:var(--red)}
+.container{max-width:1400px;margin:0 auto;padding:0 40px 80px}
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1px;background:var(--border);border:1px solid var(--border);margin:32px 0}
+.stat-card{background:var(--bg2);padding:20px 24px;display:flex;flex-direction:column;gap:4px;position:relative;overflow:hidden}
+.stat-card::before{content:'';position:absolute;top:0;left:0;width:3px;height:100%;background:var(--border2)}
+.stat-card.alert-card::before{background:var(--red)}
+.stat-card.warn-card::before{background:var(--amber)}
+.stat-card.ok-card::before{background:var(--green)}
+.stat-card.info-card::before{background:var(--cyan)}
+.stat-label{font-family:var(--mono);font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:var(--text-dim)}
+.stat-value{font-family:var(--sans);font-size:36px;font-weight:700;line-height:1;color:#fff}
+.stat-value.red{color:var(--red)}.stat-value.amber{color:var(--amber)}.stat-value.green{color:var(--green)}.stat-value.cyan{color:var(--cyan)}
+.stat-sub{font-family:var(--mono);font-size:9px;color:var(--text-dim);margin-top:2px}
+.section-header{display:flex;align-items:baseline;gap:16px;margin:40px 0 16px;padding-bottom:10px;border-bottom:1px solid var(--border)}
+.section-header h2{font-family:var(--sans);font-size:20px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#fff}
+.section-tag{font-family:var(--mono);font-size:9px;letter-spacing:.15em;color:var(--text-dim);text-transform:uppercase;border:1px solid var(--border2);padding:2px 8px}
+.section-desc{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--text-muted)}
+.panel{background:var(--bg2);border:1px solid var(--border);padding:24px;margin-bottom:16px;position:relative}
+.panel-title{font-family:var(--mono);font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--text-dim);margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.panel-title::before{content:'//';color:var(--amber-dim)}
+.chart-wrap{position:relative;height:280px}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:900px){.two-col{grid-template-columns:1fr}header{grid-template-columns:1fr}.header-meta{text-align:left}}
+.findings-panel{background:var(--bg2);border:1px solid var(--border);border-left:3px solid var(--amber);padding:24px 28px;margin-bottom:16px}
+.findings-title{font-family:var(--sans);font-weight:700;font-size:16px;text-transform:uppercase;letter-spacing:.1em;color:var(--amber);margin-bottom:16px;display:flex;align-items:center;gap:10px}
+.findings-title::before{content:'▲';font-size:10px}
+.findings-body{font-size:14px;line-height:1.7;color:var(--text)}
+.findings-body p{margin-bottom:10px}
+.finding-row{display:grid;grid-template-columns:auto 1fr;gap:12px 16px;margin:12px 0;font-family:var(--mono);font-size:12px}
+.finding-date{color:var(--amber);font-size:11px;white-space:nowrap;padding-top:2px}
+.finding-text{color:var(--text);line-height:1.5}
+#fire-map{height:380px;border:1px solid var(--border);filter:contrast(1.1) saturate(.7)}
+.data-table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12px}
+.data-table th{text-align:left;padding:8px 12px;font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:var(--text-dim);border-bottom:1px solid var(--border)}
+.data-table td{padding:8px 12px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:middle}
+.data-table tr:last-child td{border-bottom:none}
+.data-table tr:hover td{background:rgba(255,255,255,.02)}
+.badge{display:inline-block;padding:2px 6px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;border:1px solid}
+.badge-red{color:var(--red);border-color:var(--red);background:var(--red-dim)}
+.badge-amber{color:var(--amber);border-color:var(--amber);background:var(--amber-dim)}
+.badge-green{color:var(--green);border-color:var(--green);background:var(--green-dim)}
+.pct-neg{color:var(--red)}.pct-pos{color:var(--green)}.pct-neutral{color:var(--text-dim)}
+.city-pills{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px}
+.city-pill{background:var(--bg3);border:1px solid var(--border2);color:var(--text-dim);padding:4px 12px;font-family:var(--mono);font-size:10px;letter-spacing:.1em;cursor:pointer;transition:all .15s;text-transform:uppercase;user-select:none}
+.city-pill:hover{border-color:var(--cyan);color:var(--cyan)}
+.city-pill.active{background:var(--cyan-dim);border-color:var(--cyan);color:var(--cyan)}
+footer{border-top:1px solid var(--border);padding:24px 40px;font-family:var(--mono);font-size:10px;color:var(--text-muted);display:flex;gap:32px;flex-wrap:wrap}
+footer a{color:var(--text-dim);text-decoration:none}
+footer a:hover{color:var(--cyan)}
+.loading{text-align:center;padding:60px;font-family:var(--mono);font-size:11px;color:var(--text-muted);letter-spacing:.1em}
+.no-data{text-align:center;padding:40px;font-family:var(--mono);font-size:11px;color:var(--text-muted)}
+</style>
+</head>
+<body>
+
+<div class="banner">UNCLASSIFIED // OPEN SOURCE // NOT FOR OPERATIONAL USE // RESEARCH ONLY</div>
+
+<header>
+  <div class="header-title">
+    <div class="header-kicker">Gulf Compound Crisis Monitor · Satellite Intelligence</div>
+    <h1>GULF GRID<br><span>COLLAPSE</span></h1>
+    <p class="header-sub">Tracking second and third-order effects of the 2026 Gulf conflict through open-source satellite data: VIIRS nightlights, FIRMS thermal anomalies, Sentinel-1 SAR vessel detection. Independent of AIS and official reporting.</p>
+  </div>
+  <div class="header-meta">
+    <div>NIGHTLIGHTS AS OF <span class="meta-value" id="meta-latest-nl">—</span></div>
+    <div>FIRES AS OF <span class="meta-value" id="meta-latest-fire">—</span></div>
+    <div>PAGE UPDATED <span class="meta-value" id="meta-generated">—</span></div>
+    <div style="margin-top:8px;color:var(--text-muted)">WAR START <span style="color:var(--red)">2026-02-28</span></div>
+    <div>BASELINE 2026-01-15 → 2026-02-27</div>
+  </div>
+</header>
+
+<div class="alert-strip">
+  <div class="alert-dot"></div>
+  <div class="alert-text">
+    <strong>CRITICAL —</strong>
+    Synchronized nightlight collapse across 6 Gulf states Mar 6–7.
+    Tehran at <strong>−78%</strong> vs baseline on Mar 8.
+    Ras Laffan LNG thermal anomaly 71 MW at 2.6 km, Mar 6.
+  </div>
+</div>
+
+<div class="container">
+
+  <div class="stats-grid">
+    <div class="stat-card alert-card">
+      <div class="stat-label">Tehran Mar 8</div>
+      <div class="stat-value red" id="stat-tehran">—</div>
+      <div class="stat-sub">NIGHTLIGHT VS BASELINE</div>
+    </div>
+    <div class="stat-card alert-card">
+      <div class="stat-label">Dubai Mar 7</div>
+      <div class="stat-value red" id="stat-dubai">—</div>
+      <div class="stat-sub">NIGHTLIGHT VS BASELINE</div>
+    </div>
+    <div class="stat-card warn-card">
+      <div class="stat-label">Hormuz SAR Vessels</div>
+      <div class="stat-value amber" id="stat-sar">—</div>
+      <div class="stat-sub">SENTINEL-1 DETECTED</div>
+    </div>
+    <div class="stat-card info-card">
+      <div class="stat-label">Mar 6 Gulf Fires</div>
+      <div class="stat-value cyan" id="stat-fires">—</div>
+      <div class="stat-sub">VIIRS THERMAL ANOMALIES</div>
+    </div>
+    <div class="stat-card alert-card">
+      <div class="stat-label">Fire Drop Mar 6→7</div>
+      <div class="stat-value red">−80%</div>
+      <div class="stat-sub">ACROSS ALL COUNTRIES</div>
+    </div>
+    <div class="stat-card ok-card">
+      <div class="stat-label">Doha (Qatar)</div>
+      <div class="stat-value green" id="stat-doha">—</div>
+      <div class="stat-sub">ANOMALOUS POSITIVE</div>
+    </div>
+  </div>
+
+  <!-- FINDINGS -->
+  <div class="section-header">
+    <h2>Key Findings</h2>
+    <span class="section-tag">Mar 10 2026</span>
+  </div>
+
+  <div class="findings-panel">
+    <div class="findings-title">Mar 6–7: Synchronized Gulf-Wide Infrastructure Collapse</div>
+    <div class="findings-body">
+      <p>By cross-correlating raw VIIRS DNB nightlight swaths with FIRMS thermal anomaly data, a two-stage compound event is visible across the entire Gulf region simultaneously:</p>
+      <div class="finding-row">
+        <div class="finding-date">MAR 6</div>
+        <div class="finding-text"><strong>Strike day.</strong> High fire-radiative-power anomalies at Ras Laffan LNG complex, Qatar — 71 MW at 2.6 km, 57 MW at 2.1 km. Peak fire activity: Iran 35 fires &gt;30 MW, Saudi Arabia 42, Iraq 33. Nightlights begin dropping: Dubai −26%, Riyadh −46%.</div>
+      </div>
+      <div class="finding-row">
+        <div class="finding-date">MAR 7</div>
+        <div class="finding-text"><strong>Grid collapse signal.</strong> Industrial fire activity falls ~80% simultaneously across all countries (Iran 35→7, Saudi 42→10, Iraq 33→2). When a power grid fails, industrial flaring and combustion stop together. Nightlights: Dubai −60%, Riyadh −67%, Abu Dhabi −41%, Kuwait City −38%, Basra −55%. Not cloud contamination — clear-sky DNB retrievals confirmed.</div>
+      </div>
+      <div class="finding-row">
+        <div class="finding-date">MAR 8</div>
+        <div class="finding-text"><strong>Tehran approaching blackout.</strong> Most Gulf cities partially recover. Tehran reaches −78% vs baseline — a city of 16M people at 22% normal illumination. Persistent 82–103 MW fire cluster at 30.75°N 48.28°E (Khuzestan/Iraq border, 2+ days) consistent with sustained oil infrastructure burning.</div>
+      </div>
+      <div class="finding-row">
+        <div class="finding-date">ANOMALY</div>
+        <div class="finding-text"><strong>Doha (Qatar) maintains positive readings throughout (+7% to +32%).</strong> Qatar hosts Al Udeid Air Base (largest US base in the Middle East). Consistently protected while the rest of the Gulf went dark on Mar 6–7.</div>
+      </div>
+      <p style="margin-top:16px;font-size:13px;color:var(--text-dim)"><strong>Caveats:</strong> DNB L1B has no lunar or straylight correction — absolute % values are less reliable than day-to-day trend changes within the same city. Riyadh's persistent −40–47% may partly reflect Ramadan behavioral changes (baseline is pre-Ramadan January). Sources: NASA FIRMS, NASA LAADS DAAC (VNP02DNB/VNP03DNB), Sentinel-1 via ASF DAAC.</p>
+    </div>
+  </div>
+
+  <!-- NIGHTLIGHTS -->
+  <div class="section-header">
+    <h2>Nightlight Radiance</h2>
+    <span class="section-tag">VIIRS DNB + VNP46A2</span>
+    <span class="section-desc">% change vs pre-war baseline</span>
+  </div>
+  <div class="city-pills" id="city-pills"></div>
+  <div class="panel">
+    <div class="panel-title">Nighttime Radiance — % Change vs Baseline (Jan 15 – Feb 27 2026)</div>
+    <div class="chart-wrap"><canvas id="nl-chart"></canvas></div>
+  </div>
+
+  <!-- FIRES -->
+  <div class="section-header">
+    <h2>Thermal Anomaly Activity</h2>
+    <span class="section-tag">NASA FIRMS VIIRS</span>
+    <span class="section-desc">Daily fire count by region</span>
+  </div>
+  <div class="panel">
+    <div class="panel-title">Daily Fire Count — Gulf Region (VIIRS SNPP + NOAA-20)</div>
+    <div class="chart-wrap"><canvas id="fire-chart"></canvas></div>
+  </div>
+
+  <!-- MAP + TABLE -->
+  <div class="section-header">
+    <h2>Infrastructure Proximity Fires</h2>
+    <span class="section-tag">FRP &gt; 30 MW // within 30 km</span>
+  </div>
+  <div class="two-col">
+    <div class="panel" style="padding:0;overflow:hidden">
+      <div id="fire-map"><div class="loading">Loading map...</div></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Fires near monitored infrastructure</div>
+      <div id="infra-table-wrap"><div class="loading">Loading...</div></div>
+    </div>
+  </div>
+
+  <!-- SAR -->
+  <div class="section-header">
+    <h2>SAR Vessel Detection</h2>
+    <span class="section-tag">Sentinel-1A // AIS-Independent</span>
+  </div>
+  <div class="panel">
+    <div class="panel-title">Detected vessels — Strait of Hormuz</div>
+    <div id="sar-content"><div class="loading">Loading SAR data...</div></div>
+  </div>
+
+  <!-- METHODOLOGY -->
+  <div class="section-header">
+    <h2>Methodology</h2>
+    <span class="section-tag">Open Source</span>
+  </div>
+  <div class="panel">
+    <div class="panel-title">Data sources and processing pipeline</div>
+    <table class="data-table" id="method-table"></table>
+  </div>
+
+</div>
+
+<footer>
+  <div>Open-source satellite intelligence · Not for operational use · All data from public NASA / ESA / Copernicus APIs</div>
+  <div style="margin-left:auto">
+    <a href="https://firms.modaps.eosdis.nasa.gov/" target="_blank">NASA FIRMS</a> ·
+    <a href="https://ladsweb.modaps.eosdis.nasa.gov/" target="_blank">NASA LAADS</a> ·
+    <a href="https://asf.alaska.edu/" target="_blank">ASF DAAC</a>
+  </div>
+</footer>
+
+<script>
+'use strict';
+const DATA_BASE = './data';
+
+const CITY_COLORS = {
+  'Tehran':'#c84040','Dubai':'#e8a030','Abu Dhabi':'#e8c030',
+  'Doha':'#2ab87a','Kuwait City':'#30a8c8','Riyadh':'#a070d8',
+  'Manama':'#d870a0','Isfahan':'#e85030','Basra':'#70c840'
+};
+const WAR_START = '2026-02-28';
+
+// ── utils ──
+async function loadJSON(path) {
+  const r = await fetch(path);
+  if (!r.ok) throw new Error('Failed to load ' + path + ': ' + r.status);
+  return r.json();
+}
+
+function pctStr(v) {
+  if (v == null) return '—';
+  return (v > 0 ? '+' : '') + v.toFixed(1) + '%';
+}
+
+function pctClass(v) {
+  if (v == null) return 'pct-neutral';
+  return v < -5 ? 'pct-neg' : v > 5 ? 'pct-pos' : 'pct-neutral';
+}
+
+function dateLabel(d) {
+  const parts = d.split('-');
+  return parts[1] + '/' + parts[2];
+}
+
+function setText(id, text) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = String(text);
+}
+
+function makeEl(tag, props) {
+  const el = document.createElement(tag);
+  if (props) Object.assign(el, props);
+  return el;
+}
+
+// ── Chart defaults ──
+Chart.defaults.color = '#586878';
+Chart.defaults.borderColor = '#1e2d35';
+Chart.defaults.font.family = "'Share Tech Mono', monospace";
+Chart.defaults.font.size = 10;
+const gridOpts = { color: 'rgba(30,45,53,0.8)', tickColor: 'transparent' };
+const tooltipBase = {
+  backgroundColor:'#0d1417', borderColor:'#2a3f4a', borderWidth:1,
+  titleColor:'#c8d8e0', bodyColor:'#8098a8', padding:10,
+  titleFont:{family:"'Share Tech Mono',monospace",size:11},
+  bodyFont:{family:"'Share Tech Mono',monospace",size:11}
+};
+
+// ── Nightlights ──
+let nlChart = null;
+let nlData = {};
+let activeCities = new Set();
+
+function buildNLChart(cities) {
+  const allDates = [...new Set(
+    Object.values(nlData).flatMap(s => s.map(d => d.date))
+  )].sort();
+
+  const datasets = cities.map(city => {
+    const series = nlData[city] || [];
+    const map = Object.fromEntries(series.map(d => [d.date, d.pct_change]));
+    return {
+      label: city,
+      data: allDates.map(d => map[d] != null ? map[d] : null),
+      borderColor: CITY_COLORS[city] || '#586878',
+      backgroundColor: 'transparent',
+      borderWidth: 1.5, pointRadius: 2, pointHoverRadius: 4,
+      tension: 0.3, spanGaps: true
+    };
+  });
+
+  if (nlChart) nlChart.destroy();
+  nlChart = new Chart(document.getElementById('nl-chart'), {
+    type: 'line',
+    data: { labels: allDates.map(dateLabel), datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: true, position: 'top', align: 'start',
+          labels: { boxWidth: 12, boxHeight: 2, padding: 16, color: '#586878',
+            font: { family: "'Share Tech Mono',monospace", size: 10 } } },
+        tooltip: { ...tooltipBase,
+          callbacks: { label: ctx => ' ' + ctx.dataset.label + ': ' +
+            (ctx.raw != null ? pctStr(ctx.raw) : '—') } }
+      },
+      scales: {
+        x: { grid: gridOpts, ticks: { maxTicksLimit: 12 } },
+        y: { grid: gridOpts, ticks: { callback: v => (v > 0 ? '+' : '') + v + '%' } }
+      }
+    }
+  });
+}
+
+function initCityPills(cities) {
+  const container = document.getElementById('city-pills');
+  const defaultActive = Object.keys(CITY_COLORS);
+  cities.forEach(city => {
+    const btn = makeEl('button', { className: 'city-pill', textContent: city });
+    if (defaultActive.includes(city)) { btn.classList.add('active'); activeCities.add(city); }
+    btn.addEventListener('click', () => {
+      if (activeCities.has(city)) { activeCities.delete(city); btn.classList.remove('active'); }
+      else { activeCities.add(city); btn.classList.add('active'); }
+      buildNLChart([...activeCities]);
+    });
+    container.appendChild(btn);
+  });
+  buildNLChart([...activeCities]);
+}
+
+// ── Fire chart ──
+function buildFireChart(fireData) {
+  const { dates, regions } = fireData;
+  const palette = ['#c84040','#e8a030','#30a8c8','#2ab87a','#a070d8'];
+  const datasets = Object.keys(regions).map((name, i) => ({
+    label: name, data: regions[name].counts,
+    backgroundColor: palette[i % palette.length] + '80',
+    borderColor: palette[i % palette.length], borderWidth: 1, stack: 'fires'
+  }));
+  new Chart(document.getElementById('fire-chart'), {
+    type: 'bar',
+    data: { labels: dates.map(dateLabel), datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: true, position: 'top', align: 'start',
+          labels: { boxWidth: 12, boxHeight: 8, padding: 16, color: '#586878',
+            font: { family: "'Share Tech Mono',monospace", size: 10 } } },
+        tooltip: { ...tooltipBase,
+          callbacks: { label: ctx => ' ' + ctx.dataset.label + ': ' + ctx.raw + ' fires' } }
+      },
+      scales: {
+        x: { grid: gridOpts, stacked: true, ticks: { maxTicksLimit: 12 } },
+        y: { grid: gridOpts, stacked: true, beginAtZero: true }
+      }
+    }
+  });
+}
+
+// ── Infra table (DOM, no innerHTML) ──
+function buildInfraTable(data) {
+  const wrap = document.getElementById('infra-table-wrap');
+  wrap.textContent = '';
+
+  if (!data.length) {
+    const msg = makeEl('div', { className: 'no-data', textContent: 'No high-FRP infrastructure fires in range' });
+    wrap.appendChild(msg);
+    return;
+  }
+
+  const table = makeEl('table', { className: 'data-table' });
+  const thead = makeEl('thead');
+  const hrow = makeEl('tr');
+  ['Date','Nearest Infrastructure','Distance','FRP'].forEach(h => {
+    hrow.appendChild(makeEl('th', { textContent: h }));
+  });
+  thead.appendChild(hrow);
+  table.appendChild(thead);
+
+  const tbody = makeEl('tbody');
+  data.slice(0, 20).forEach(f => {
+    const dt = new Date(f.detected_at);
+    const dateStr = String(dt.getUTCMonth() + 1).padStart(2, '0') + '/' +
+                    String(dt.getUTCDate()).padStart(2, '0');
+    const tr = makeEl('tr');
+
+    const tdDate = makeEl('td', { textContent: dateStr });
+    const tdInfra = makeEl('td', { textContent: f.infrastructure });
+    const tdDist = makeEl('td', { textContent: f.distance_km + ' km' });
+
+    const badge = makeEl('span', { textContent: f.frp.toFixed(0) + ' MW' });
+    badge.className = 'badge ' + (f.frp >= 70 ? 'badge-red' : f.frp >= 40 ? 'badge-amber' : 'badge-green');
+    const tdFrp = makeEl('td');
+    tdFrp.appendChild(badge);
+
+    tr.append(tdDate, tdInfra, tdDist, tdFrp);
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  wrap.appendChild(table);
+}
+
+// ── Leaflet map ──
+function buildMap(infraFires) {
+  const mapEl = document.getElementById('fire-map');
+  mapEl.textContent = '';
+  const map = L.map('fire-map', { zoomControl: true }).setView([27, 52], 5);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: '© OpenStreetMap © CARTO', subdomains: 'abcd', maxZoom: 10
+  }).addTo(map);
+
+  infraFires.forEach(f => {
+    const radius = Math.max(4, Math.sqrt(f.frp) * 0.8);
+    const color = f.frp >= 70 ? '#c84040' : f.frp >= 40 ? '#e8a030' : '#e8e030';
+    const popupLines = [
+      f.infrastructure,
+      'FRP: ' + f.frp.toFixed(0) + ' MW',
+      'Distance: ' + f.distance_km + ' km',
+      f.detected_at.slice(0, 10)
+    ];
+    L.circleMarker([f.lat, f.lon], {
+      radius, fillColor: color, fillOpacity: 0.7, color, weight: 1, opacity: 0.9
+    }).addTo(map).bindPopup(popupLines.join('<br>'));
+  });
+}
+
+// ── SAR table (DOM) ──
+function buildSAR(sarData) {
+  const wrap = document.getElementById('sar-content');
+  wrap.textContent = '';
+  const entries = Object.entries(sarData);
+  if (!entries.length) {
+    wrap.appendChild(makeEl('div', { className: 'no-data', textContent: 'No SAR detections available' }));
+    return;
+  }
+
+  const table = makeEl('table', { className: 'data-table' });
+  const thead = makeEl('thead');
+  const hrow = makeEl('tr');
+  ['Chokepoint','Date','Vessels Detected','vs Baseline','Scene Coverage','Mean SCR'].forEach(h => {
+    hrow.appendChild(makeEl('th', { textContent: h }));
+  });
+  thead.appendChild(hrow);
+  table.appendChild(thead);
+
+  const tbody = makeEl('tbody');
+  entries.forEach(([chokepoint, records]) => {
+    records.forEach(r => {
+      const tr = makeEl('tr');
+      const pctEl = makeEl('td', {
+        textContent: r.pct_change != null ? pctStr(r.pct_change) : '(no baseline)',
+        className: r.pct_change != null ? pctClass(r.pct_change) : 'pct-neutral'
+      });
+      const tdVessels = makeEl('td', { textContent: String(r.vessel_count) });
+      tdVessels.style.cssText = 'font-weight:bold;color:#fff';
+
+      tr.append(
+        makeEl('td', { textContent: chokepoint }),
+        makeEl('td', { textContent: r.date }),
+        tdVessels,
+        pctEl,
+        makeEl('td', { textContent: (r.scene_coverage * 100).toFixed(0) + '%' }),
+        makeEl('td', { textContent: r.mean_scr_db.toFixed(1) + ' dB' })
+      );
+      tbody.appendChild(tr);
+    });
+  });
+  table.appendChild(tbody);
+
+  const note = makeEl('p', {
+    textContent: 'Sentinel-1A IW GRD // VV polarisation // CFAR SCR > 10 dB // 10–1200 px vessel filter'
+  });
+  note.style.cssText = 'font-family:var(--mono);font-size:10px;color:var(--text-muted);margin-top:12px';
+
+  wrap.appendChild(table);
+  wrap.appendChild(note);
+}
+
+// ── Methodology table (DOM) ──
+function buildMethodTable() {
+  const table = document.getElementById('method-table');
+  const head = makeEl('thead');
+  const hrow = makeEl('tr');
+  ['Signal','Source','Resolution','Lag','Method'].forEach(h => {
+    hrow.appendChild(makeEl('th', { textContent: h }));
+  });
+  head.appendChild(hrow);
+  table.appendChild(head);
+
+  const body = makeEl('tbody');
+  const rows = [
+    ['Nightlight (primary)','NASA VNP46A2 (Black Marble)','500 m','~11 days','Per-city radiance from HDF5 tiles; lunar corrected'],
+    ['Nightlight (real-time)','NASA VIIRS DNB L1B Swath','750 m','~3 hours','No lunar correction; relative trends only'],
+    ['Thermal anomalies','NASA FIRMS VIIRS SNPP + NOAA-20','375 m','~3 hours','Fire radiative power (MW); geo-proximity to infrastructure'],
+    ['SAR vessel detection','Sentinel-1A GRD IW (ASF DAAC)','10 m','~6-day revisit','CFAR detector; SCR > 10 dB; 10–1200 px component filter'],
+  ];
+  rows.forEach(cols => {
+    const tr = makeEl('tr');
+    cols.forEach(text => tr.appendChild(makeEl('td', { textContent: text })));
+    body.appendChild(tr);
+  });
+  table.appendChild(body);
+}
+
+// ── Stats ──
+function buildStats(nl, fireData, sarData) {
+  const tehranMar8 = (nl['Tehran'] || []).find(d => d.date === '2026-03-08');
+  if (tehranMar8?.pct_change != null) setText('stat-tehran', pctStr(tehranMar8.pct_change));
+
+  const dubaiMar7 = (nl['Dubai'] || []).find(d => d.date === '2026-03-07');
+  if (dubaiMar7?.pct_change != null) setText('stat-dubai', pctStr(dubaiMar7.pct_change));
+
+  const dohaLatest = (nl['Doha'] || []).slice(-1)[0];
+  if (dohaLatest?.pct_change != null) {
+    setText('stat-doha', pctStr(dohaLatest.pct_change));
+    const el = document.getElementById('stat-doha');
+    if (el) el.className = 'stat-value green';
+  }
+
+  const sarEntries = Object.values(sarData)[0];
+  if (sarEntries?.length) {
+    setText('stat-sar', String(sarEntries[sarEntries.length - 1].vessel_count));
+  }
+
+  const mar6idx = fireData.dates.indexOf('2026-03-06');
+  if (mar6idx >= 0) {
+    const total = Object.values(fireData.regions).reduce((s, r) => s + r.counts[mar6idx], 0);
+    setText('stat-fires', total.toLocaleString());
+  }
+}
+
+// ── Meta ──
+function buildMeta(meta) {
+  if (meta.latest_nightlight) setText('meta-latest-nl', meta.latest_nightlight);
+  if (meta.latest_fire) {
+    const d = new Date(meta.latest_fire);
+    setText('meta-latest-fire', d.toISOString().slice(0, 16).replace('T', ' ') + 'Z');
+  }
+  if (meta.generated_at) {
+    setText('meta-generated', new Date(meta.generated_at).toISOString().slice(0, 10));
+  }
+}
+
+// ── Init ──
+async function init() {
+  try {
+    const [meta, nl, fires, infraFires, sar] = await Promise.all([
+      loadJSON(DATA_BASE + '/meta.json'),
+      loadJSON(DATA_BASE + '/nightlights.json'),
+      loadJSON(DATA_BASE + '/fires.json'),
+      loadJSON(DATA_BASE + '/fires_infra.json'),
+      loadJSON(DATA_BASE + '/sar.json'),
+    ]);
+
+    nlData = nl;
+    buildMeta(meta);
+    buildStats(nl, fires, sar);
+    initCityPills(Object.keys(nl));
+    buildFireChart(fires);
+    buildInfraTable(infraFires);
+    buildMap(infraFires);
+    buildSAR(sar);
+    buildMethodTable();
+
+  } catch (err) {
+    console.error('Data load failed:', err);
+    const msg = makeEl('div');
+    msg.style.cssText = 'background:#1a0808;border:1px solid #c84040;padding:20px;margin:20px 0;font-family:var(--mono);font-size:12px;color:#c84040';
+    msg.textContent = 'DATA LOAD ERROR: ' + err.message + ' — Check that JSON files exist in ./data/';
+    document.querySelector('.container').prepend(msg);
+  }
+}
+
+init();
+</script>
+</body>
+</html>
