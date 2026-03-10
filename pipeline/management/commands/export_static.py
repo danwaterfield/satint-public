@@ -21,6 +21,7 @@ from django.db.models import Avg, Count, Max, Min, Sum
 
 from pipeline.models import (
     AreaOfInterest,
+    CompoundRiskIndicator,
     NightlightObservation,
     SARVesselDetection,
     ThermalAnomaly,
@@ -53,8 +54,10 @@ class Command(BaseCommand):
         self._export_meta(out_dir)
         self._export_nightlights(out_dir, cutoff)
         self._export_fires(out_dir, cutoff)
+        self._export_fires_geojson(out_dir)
         self._export_fires_infra(out_dir, cutoff)
         self._export_sar(out_dir)
+        self._export_compound_risk(out_dir)
 
         self.stdout.write(self.style.SUCCESS(f"Export complete → {out_dir}/"))
 
@@ -148,6 +151,39 @@ class Command(BaseCommand):
 
         self._write(os.path.join(out_dir, "fires.json"), result)
 
+    def _export_fires_geojson(self, out_dir):
+        """Recent 48h fires as GeoJSON for the Leaflet map."""
+        from datetime import datetime, timezone as tz
+        cutoff_dt = datetime.now(tz=tz.utc) - timedelta(hours=48)
+        fires = (
+            ThermalAnomaly.objects.filter(detected_at__gte=cutoff_dt)
+            .select_related("nearest_infrastructure")
+            .values(
+                "latitude", "longitude", "frp", "confidence",
+                "satellite", "detected_at",
+                "nearest_infrastructure__name", "distance_to_infrastructure",
+            )
+        )
+        features = [
+            {
+                "type": "Feature",
+                "geometry": {"type": "Point", "coordinates": [f["longitude"], f["latitude"]]},
+                "properties": {
+                    "frp": round(f["frp"], 1) if f["frp"] else 0,
+                    "confidence": f["confidence"],
+                    "satellite": f["satellite"],
+                    "detected_at": f["detected_at"].isoformat() if f["detected_at"] else None,
+                    "nearest_infrastructure": f["nearest_infrastructure__name"],
+                    "distance_km": round(f["distance_to_infrastructure"], 1) if f["distance_to_infrastructure"] else None,
+                },
+            }
+            for f in fires
+        ]
+        self._write(
+            os.path.join(out_dir, "fires_geojson.json"),
+            {"type": "FeatureCollection", "features": features},
+        )
+
     def _export_fires_infra(self, out_dir, cutoff):
         """High-FRP fires within 30km of monitored infrastructure."""
         fires = (
@@ -179,6 +215,42 @@ class Command(BaseCommand):
             for f in fires
         ]
         self._write(os.path.join(out_dir, "fires_infra.json"), result)
+
+    def _export_compound_risk(self, out_dir):
+        """Latest compound risk indicators."""
+        from datetime import datetime
+        today = date.today()
+        indicators = (
+            CompoundRiskIndicator.objects.filter(date=today)
+            .select_related("aoi")
+            .order_by("-compound_risk")
+        )
+        # Fallback: most recent date if none today
+        if not indicators.exists():
+            latest = CompoundRiskIndicator.objects.aggregate(d=Max("date"))["d"]
+            if latest:
+                indicators = (
+                    CompoundRiskIndicator.objects.filter(date=latest)
+                    .select_related("aoi")
+                    .order_by("-compound_risk")
+                )
+
+        result = {
+            "as_of": str(indicators[0].date) if indicators else None,
+            "indicators": [
+                {
+                    "aoi_name": i.aoi.name,
+                    "country": i.aoi.country,
+                    "compound_risk": round(i.compound_risk, 4),
+                    "alert_level": i.alert_level,
+                    "nightlight_score": round(i.nightlight_score, 4),
+                    "fire_activity_score": round(i.fire_activity_score, 4),
+                    "trade_flow_score": round(i.trade_flow_score, 4),
+                }
+                for i in indicators
+            ],
+        }
+        self._write(os.path.join(out_dir, "compound_risk.json"), result)
 
     def _export_sar(self, out_dir):
         """SAR vessel detections at chokepoints."""
