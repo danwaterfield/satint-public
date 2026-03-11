@@ -22,6 +22,7 @@ from django.db.models import Avg, Count, Max, Min, Sum
 from pipeline.models import (
     AreaOfInterest,
     CompoundRiskIndicator,
+    FlightActivity,
     InternetOutage,
     MigrationPressureIndicator,
     NightlightObservation,
@@ -65,6 +66,7 @@ class Command(BaseCommand):
         self._export_internet(out_dir)
         self._export_thermal_signatures(out_dir)
         self._export_nz(out_dir)
+        self._export_flights(out_dir)
 
         self.stdout.write(self.style.SUCCESS(f"Export complete → {out_dir}/"))
 
@@ -427,3 +429,26 @@ class Command(BaseCommand):
         }
 
         self._write(os.path.join(out_dir, "nz.json"), result)
+
+    def _export_flights(self, out_dir):
+        """Airport flight activity time series."""
+        from collections import defaultdict
+
+        flights = (
+            FlightActivity.objects.all()
+            .order_by("airport_name", "date")
+            .values("airport_name", "airport_icao", "date",
+                    "arrivals", "departures", "total_movements")
+        )
+
+        airports = defaultdict(list)
+        for f in flights:
+            airports[f["airport_name"]].append({
+                "date": str(f["date"]),
+                "icao": f["airport_icao"],
+                "arrivals": f["arrivals"],
+                "departures": f["departures"],
+                "total": f["total_movements"],
+            })
+
+        self._write(os.path.join(out_dir, "flights.json"), dict(sorted(airports.items())))

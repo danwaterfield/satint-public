@@ -112,7 +112,8 @@ def _api_get(endpoint: str, params: dict) -> list:
             return []
 
         if resp.status_code == 429:
-            logger.warning("Rate limited by OpenSky API, backing off")
+            logger.warning("Rate limited by OpenSky API, backing off 60s")
+            time.sleep(60)
             return []
 
         resp.raise_for_status()
@@ -180,7 +181,7 @@ def fetch_airport_arrivals(icao: str, start_date: date, end_date: date) -> list:
         )
 
         chunk_start = chunk_end.date() if isinstance(chunk_end, datetime) else chunk_end
-        time.sleep(1)  # respect rate limits
+        time.sleep(3)  # respect rate limits (4000 credits/day)
 
     return all_flights
 
@@ -223,7 +224,7 @@ def fetch_airport_departures(icao: str, start_date: date, end_date: date) -> lis
         )
 
         chunk_start = chunk_end.date() if isinstance(chunk_end, datetime) else chunk_end
-        time.sleep(1)  # respect rate limits
+        time.sleep(3)  # respect rate limits (4000 credits/day)
 
     return all_flights
 

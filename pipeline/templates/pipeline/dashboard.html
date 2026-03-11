@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="refresh" content="300">
+<title>Gulf Region — Compound Risk Monitor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --navy:    #1a2744;
+    --navy-lt: #243358;
+    --slate-lt:#718096;
+    --border:  #d1d9e0;
+    --bg:      #f7f8fa;
+    --white:   #ffffff;
+    --text:    #1a202c;
+
+    --red:     #c0392b;
+    --red-lt:  #fff0ef;
+    --amber:   #b7791f;
+    --amber-lt:#fffbeb;
+    --green:   #276749;
+    --green-lt:#f0fff4;
+    --blue:    #2b6cb0;
+
+    --font-mono: 'IBM Plex Mono', 'Courier New', monospace;
+    --font-sans: 'Inter', system-ui, sans-serif;
+    --radius: 3px;
+  }
+
+  *:focus-visible { outline: 2px solid #60a5fa; outline-offset: 2px; }
+
+  body { font-family: var(--font-sans); font-size: 14px; color: var(--text); background: var(--bg); line-height: 1.5; }
+
+  .topbar {
+    background: var(--navy); color: #fff;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 24px; height: 52px; border-bottom: 2px solid var(--red);
+  }
+  .topbar-left { display: flex; align-items: baseline; gap: 16px; }
+  .topbar-title { font-size: 15px; font-weight: 600; letter-spacing: .02em; }
+  .topbar-sub { font-size: 13px; color: #a0b0c8; letter-spacing: .04em; text-transform: uppercase; }
+  .topbar-right { display: flex; align-items: center; gap: 20px; font-size: 13px; color: #a0b0c8; }
+  .topbar-nz { color: #a0b0c8; text-decoration: none; font-size: 13px; background: rgba(255,255,255,.1); padding: 4px 12px; border-radius: 3px; border: 1px solid rgba(255,255,255,.2); }
+  .topbar-nz:hover { background: rgba(255,255,255,.2); color: #fff; }
+  .status-dot { width: 7px; height: 7px; border-radius: 50%; background: #48bb78; display: inline-block; margin-right: 5px; }
+  .topbar-date { font-family: var(--font-mono); font-size: 13px; }
+
+  .alert-banner {
+    background: #fff0ef; border-bottom: 1px solid #f5c6c3;
+    padding: 8px 24px; display: flex; align-items: center; gap: 10px;
+    font-size: 14px; color: var(--red); font-weight: 500;
+  }
+
+  .main { padding: 20px 24px; display: grid; gap: 20px; }
+
+  .section-header {
+    display: flex; align-items: baseline; justify-content: space-between;
+    margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid var(--border);
+  }
+  .section-title { font-size: 13px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--navy); }
+  .section-meta { font-size: 13px; color: var(--slate-lt); }
+
+  .card { background: var(--white); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
+
+  .summary-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+  .stat-card { background: var(--white); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; }
+  .stat-label { font-size: 13px; text-transform: uppercase; letter-spacing: .07em; color: var(--slate-lt); margin-bottom: 4px; }
+  .stat-value { font-family: var(--font-mono); font-size: 22px; font-weight: 500; color: var(--navy); }
+  .stat-value.red   { color: var(--red); }
+  .stat-value.amber { color: var(--amber); }
+  .stat-value.green { color: var(--green); }
+  .stat-sub { font-size: 13px; color: var(--slate-lt); margin-top: 2px; }
+
+  .risk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+  .risk-card { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; background: var(--white); border-left: 3px solid transparent; }
+  .risk-card.emergency { border-left-color: var(--red); background: var(--red-lt); }
+  .risk-card.critical  { border-left-color: #e53e3e; }
+  .risk-card.high      { border-left-color: var(--amber); }
+  .risk-card.elevated  { border-left-color: #3182ce; }
+  .risk-card.normal    { border-left-color: #68d391; }
+
+  .risk-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+  .risk-city { font-weight: 600; font-size: 14px; }
+  .risk-country { font-size: 13px; color: var(--slate-lt); margin-top: 1px; }
+
+  .badge { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; padding: 2px 6px; border-radius: 2px; min-width: 56px; text-align: center; display: inline-block; }
+  .badge-emergency { background: #7b1a1a; color: #fff; }
+  .badge-critical  { background: #e53e3e; color: #fff; }
+  .badge-high      { background: #ed8936; color: #fff; }
+  .badge-elevated  { background: #d69e2e; color: #fff; }
+  .badge-normal    { background: #38a169; color: #fff; }
+
+  .status-operating { background: #38a169; color: #fff; }
+  .status-degraded  { background: #ed8936; color: #fff; }
+  .status-offline   { background: #718096; color: #fff; }
+  .status-damaged   { background: #c0392b; color: #fff; }
+  .status-unknown   { background: #a0aec0; color: #fff; }
+
+  .risk-score { font-family: var(--font-mono); font-size: 20px; font-weight: 500; margin-bottom: 8px; }
+  .progress-track { background: #edf2f7; border-radius: 2px; height: 5px; margin-bottom: 6px; }
+  .progress-fill { height: 100%; border-radius: 2px; }
+  .sub-scores { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; margin-top: 8px; }
+  .sub-score-item { font-size: 13px; }
+  .sub-score-label { color: var(--slate-lt); }
+  .sub-score-val { font-family: var(--font-mono); font-weight: 500; }
+
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+
+  .chart-controls { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .chart-controls label { font-size: 13px; color: var(--slate-lt); }
+  select.ctrl-select {
+    font-family: var(--font-sans); font-size: 14px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 4px 8px; background: var(--white); color: var(--text); cursor: pointer;
+  }
+  #nightlight-chart { height: 260px; }
+  #fire-map { height: 400px; border-radius: var(--radius); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th {
+    text-align: left; font-size: 11px; font-weight: 600; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--slate-lt);
+    padding: 6px 10px; border-bottom: 1px solid var(--border); background: #f7f8fa;
+  }
+  td { padding: 7px 10px; border-bottom: 1px solid #edf2f7; vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #f7fafc; }
+  tr.frp-high:hover td { background: #fff0ef; }
+  .mono { font-family: var(--font-mono); }
+  .pct-pos { color: var(--green); font-weight: 500; }
+  .pct-neg { color: var(--red); font-weight: 500; }
+  .pct-neu { color: var(--slate-lt); }
+  .frp-high td { background: #fff8f8; }
+  .conf-h { color: var(--red); font-weight: 600; }
+  .conf-n { color: var(--amber); }
+  .conf-l { color: var(--slate-lt); }
+  .nl-bar-wrap { display: flex; align-items: center; gap: 8px; }
+  .nl-bar-track { flex: 1; background: #edf2f7; border-radius: 2px; height: 6px; }
+  .nl-bar-fill  { height: 100%; border-radius: 2px; }
+
+  .footer { border-top: 1px solid var(--border); padding: 12px 24px; font-size: 13px; color: var(--slate-lt); display: flex; justify-content: space-between; }
+
+  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0; }
+
+  .empty-state { color: var(--slate-lt); font-size: 14px; padding: 12px 0; }
+
+  .conf-legend { font-size: 13px; color: var(--slate-lt); margin-top: 8px; }
+  .conf-legend span { margin-right: 12px; }
+
+  @media (max-width: 900px) {
+    .summary-row { grid-template-columns: repeat(2, 1fr); }
+    .two-col { grid-template-columns: 1fr; }
+    .risk-grid { grid-template-columns: 1fr 1fr; }
+  }
+  @media (max-width: 600px) {
+    .summary-row { grid-template-columns: 1fr; }
+    .risk-grid { grid-template-columns: 1fr; }
+    .topbar { flex-direction: column; height: auto; padding: 10px 16px; gap: 8px; }
+    .topbar-right { flex-wrap: wrap; justify-content: center; }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-left">
+    <span class="topbar-title">Gulf Region Compound Risk Monitor</span>
+    <span class="topbar-sub">Satellite Intelligence Pipeline &mdash; v0.1</span>
+  </div>
+  <div class="topbar-right">
+    <span><span class="status-dot"></span>Live</span>
+    <span class="topbar-date">{{ today|date:"D, d M Y" }}</span>
+    <a href="/nz/" class="topbar-nz">NZ Migration Dashboard &rarr;</a>
+    <span>Auto-refresh 5 min</span>
+  </div>
+</header>
+
+{% if has_critical %}
+<div class="alert-banner" role="alert">
+  <strong><span aria-hidden="true">&#9888;</span> Alert:</strong>
+  {% if alert_counts.emergency > 0 %}{{ alert_counts.emergency }} location{{ alert_counts.emergency|pluralize }} at EMERGENCY status.{% endif %}
+  {% if alert_counts.critical > 0 %}{{ alert_counts.critical }} location{{ alert_counts.critical|pluralize }} at CRITICAL status.{% endif %}
+  Immediate review recommended.
+</div>
+{% endif %}
+
+<div class="main">
+
+  <div class="summary-row">
+    <div class="stat-card">
+      <div class="stat-label">Locations Monitored</div>
+      <div class="stat-value">{{ risk_indicators.count }}</div>
+      <div class="stat-sub">Cities &amp; regions</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Emergency / Critical</div>
+      <div class="stat-value red">{{ alert_counts.emergency }}&thinsp;/&thinsp;{{ alert_counts.critical }}</div>
+      <div class="stat-sub">As of {{ today|date:"d M" }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Infrastructure Fires (48h)</div>
+      <div class="stat-value amber">{{ recent_fires.count }}</div>
+      <div class="stat-sub">Within 25km of known sites</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Facilities Damaged</div>
+      <div class="stat-value {% if damaged_facilities %}red{% else %}green{% endif %}">{{ damaged_facilities|length }}</div>
+      <div class="stat-sub">Strike signatures detected</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Data Sources Integrated</div>
+      <div class="stat-value green">7</div>
+      <div class="stat-sub">DNB &bull; FIRMS &bull; SAR &bull; IODA &bull; GDELT &bull; Thermal &bull; S2</div>
+    </div>
+  </div>
+
+  <div>
+    <div class="section-header">
+      <span class="section-title">Compound Risk Indicators</span>
+      <span class="section-meta">Weighted composite: NL 20% | Fire 15% | Trade 15% | NO&#8322; 12% | Internet 12% | Flights 10% | GDELT 8% | Thermal 8%</span>
+    </div>
+    <div class="risk-grid">
+      {% for ind in risk_indicators %}
+      <div class="risk-card {{ ind.alert_level }}">
+        <div class="risk-card-header">
+          <div>
+            <div class="risk-city">{{ ind.aoi.name }}</div>
+            <div class="risk-country">{{ ind.aoi.country }}</div>
+          </div>
+          <span class="badge badge-{{ ind.alert_level }}">{{ ind.alert_level }}</span>
+        </div>
+        <div class="risk-score">{{ ind.compound_risk|floatformat:2 }}</div>
+        <div class="progress-track">
+          <div class="progress-fill" style="width:{% widthratio ind.compound_risk 1 100 %}%; background:{% if ind.compound_risk >= 0.8 %}#c0392b{% elif ind.compound_risk >= 0.6 %}#e53e3e{% elif ind.compound_risk >= 0.4 %}#ed8936{% elif ind.compound_risk >= 0.2 %}#3182ce{% else %}#38a169{% endif %};"></div>
+        </div>
+        <div class="sub-scores">
+          <div class="sub-score-item">
+            <div class="sub-score-label">Nightlight</div>
+            <div class="sub-score-val">{{ ind.nightlight_score|floatformat:2 }}</div>
+          </div>
+          <div class="sub-score-item">
+            <div class="sub-score-label">Fire</div>
+            <div class="sub-score-val">{{ ind.fire_activity_score|floatformat:2 }}</div>
+          </div>
+          <div class="sub-score-item">
+            <div class="sub-score-label">Trade</div>
+            <div class="sub-score-val">{{ ind.trade_flow_score|floatformat:2 }}</div>
+          </div>
+        </div>
+      </div>
+      {% empty %}
+      <p class="empty-state" style="grid-column:1/-1">Risk data not yet available for today.</p>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="two-col">
+    <div class="card">
+      <div class="section-header">
+        <span class="section-title">Nighttime Radiance</span>
+        <span class="section-meta">vs. pre-war baseline (15 Jan – 27 Feb 2026)</span>
+      </div>
+      <div class="chart-controls">
+        <label for="city-select">Location</label>
+        <select id="city-select" class="ctrl-select"></select>
+      </div>
+      <div id="nightlight-chart"></div>
+    </div>
+
+    <div class="card">
+      <div class="section-header">
+        <span class="section-title">Maritime Chokepoint Traffic</span>
+        <span class="section-meta">Vessel transits vs. pre-war baseline</span>
+      </div>
+      <div class="table-wrap">
+      <table>
+        <caption class="sr-only">Maritime chokepoint vessel transit data compared to pre-war baseline</caption>
+        <thead>
+          <tr>
+            <th scope="col">Chokepoint</th>
+            <th scope="col">Source</th>
+            <th scope="col" style="text-align:right">Count</th>
+            <th scope="col" style="text-align:right">Baseline</th>
+            <th scope="col" style="text-align:right">Change</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for t in vessel_today %}
+          <tr>
+            <td>{{ t.chokepoint.name|truncatechars:20 }}</td>
+            <td style="color:var(--slate-lt)">AIS &middot; {{ t.vessel_type }}</td>
+            <td class="mono" style="text-align:right">{{ t.count }}</td>
+            <td class="mono" style="text-align:right">{% if t.baseline_count %}{{ t.baseline_count|floatformat:0 }}{% else %}&mdash;{% endif %}</td>
+            <td class="mono" style="text-align:right">
+              {% if t.pct_change %}
+                <span class="{% if t.pct_change > 0 %}pct-pos{% elif t.pct_change < -10 %}pct-neg{% else %}pct-neu{% endif %}">
+                  {% if t.pct_change > 0 %}+{% endif %}{{ t.pct_change|floatformat:1 }}%
+                </span>
+              {% else %}&mdash;{% endif %}
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="5" style="color:var(--slate-lt); text-align:center; padding:20px;">No AIS vessel data available.</td></tr>
+          {% endfor %}
+          {% for s in sar_detections %}
+          <tr>
+            <td>{{ s.chokepoint.name|truncatechars:20 }}</td>
+            <td style="color:var(--slate-lt)">SAR &middot; {{ s.date|date:"d M Y" }}</td>
+            <td class="mono" style="text-align:right">{{ s.vessel_count }}</td>
+            <td class="mono" style="text-align:right">{% if s.baseline_count %}{{ s.baseline_count|floatformat:0 }}{% else %}&mdash;{% endif %}</td>
+            <td class="mono" style="text-align:right">
+              {% if s.pct_change %}
+                <span class="{% if s.pct_change > 0 %}pct-pos{% elif s.pct_change < -15 %}pct-neg{% else %}pct-neu{% endif %}">
+                  {% if s.pct_change > 0 %}+{% endif %}{{ s.pct_change|floatformat:1 }}%
+                </span>
+              {% else %}&mdash;{% endif %}
+            </td>
+          </tr>
+          {% empty %}
+            {% if not vessel_today %}
+            <tr><td colspan="5" style="color:var(--slate-lt); text-align:center; padding:20px;">No vessel data — SAR processing pending.</td></tr>
+            {% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <div class="card">
+      <div class="section-header">
+        <span class="section-title">Active Fire Detections</span>
+        <span class="section-meta">VIIRS SNPP &amp; NOAA-20 &bull; 48-hour window</span>
+      </div>
+      <div id="fire-map" role="img" aria-label="Active fire detection map"></div>
+    </div>
+
+    <div class="card">
+      <div class="section-header">
+        <span class="section-title">Nightlight Deviation by City</span>
+        <span class="section-meta">% change from pre-war baseline</span>
+      </div>
+      <div class="table-wrap">
+      <table>
+        <caption class="sr-only">Nightlight radiance deviation by city compared to pre-war baseline</caption>
+        <thead>
+          <tr>
+            <th scope="col">City</th>
+            <th scope="col">Source</th>
+            <th scope="col" style="text-align:right">Change</th>
+            <th scope="col">Trend</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obs in nightlight_obs %}
+          <tr>
+            <td style="font-weight:500">{{ obs.aoi.name }}</td>
+            <td style="color:var(--slate-lt)">{{ obs.aoi.country }}</td>
+            <td class="mono" style="text-align:right">
+              <span class="{% if obs.pct_change < -20 %}pct-neg{% elif obs.pct_change < 0 %}pct-neu{% else %}pct-pos{% endif %}">
+                {% if obs.pct_change > 0 %}+{% endif %}{{ obs.pct_change|floatformat:1 }}%
+              </span>
+            </td>
+            <td>
+              <div class="nl-bar-wrap">
+                <div class="nl-bar-track">
+                  {% if obs.pct_change < 0 %}
+                  <div class="nl-bar-fill" style="width:{% widthratio obs.pct_change|floatformat:0 -100 100 %}%; background:{% if obs.pct_change < -40 %}#c0392b{% elif obs.pct_change < -20 %}#e53e3e{% elif obs.pct_change < -10 %}#ed8936{% else %}#a0aec0{% endif %};"></div>
+                  {% elif obs.pct_change > 0 %}
+                  <div class="nl-bar-fill" style="width:{% widthratio obs.pct_change|floatformat:0 100 100 %}%; background:#38a169;"></div>
+                  {% endif %}
+                </div>
+              </div>
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="4" style="color:var(--slate-lt); text-align:center; padding:20px;">No nightlight data for today.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Internet Connectivity + Infrastructure Status -->
+  <div class="two-col">
+    <div class="card">
+      <div class="section-header">
+        <span class="section-title">Internet Connectivity</span>
+        <span class="section-meta">IODA GTR-Norm &bull; vs. pre-war baseline</span>
+      </div>
+      <div class="table-wrap">
+      <table>
+        <caption class="sr-only">Internet connectivity scores by country from IODA monitoring</caption>
+        <thead>
+          <tr>
+            <th scope="col">Country</th>
+            <th scope="col" style="text-align:right">Score</th>
+            <th scope="col" style="text-align:right">Min</th>
+            <th scope="col" style="text-align:right">vs Baseline</th>
+            <th scope="col">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for inet in internet_data %}
+          <tr>
+            <td style="font-weight:500">{{ inet.country }}</td>
+            <td class="mono" style="text-align:right">{{ inet.connectivity|floatformat:3 }}</td>
+            <td class="mono" style="text-align:right">{% if inet.min_connectivity %}{{ inet.min_connectivity|floatformat:3 }}{% else %}&mdash;{% endif %}</td>
+            <td class="mono" style="text-align:right">
+              {% if inet.pct_change != None %}
+                <span class="{% if inet.pct_change < -10 %}pct-neg{% elif inet.pct_change < -5 %}pct-neu{% else %}pct-pos{% endif %}">
+                  {% if inet.pct_change > 0 %}+{% endif %}{{ inet.pct_change|floatformat:1 }}%
+                </span>
+              {% else %}&mdash;{% endif %}
+            </td>
+            <td>
+              {% if inet.pct_change != None %}
+                {% if inet.pct_change < -15 %}
+                  <span class="badge badge-critical">Degraded</span>
+                {% elif inet.pct_change < -5 %}
+                  <span class="badge badge-elevated">Reduced</span>
+                {% else %}
+                  <span class="badge badge-normal">Normal</span>
+                {% endif %}
+              {% endif %}
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="5" class="empty-state" style="text-align:center; padding:20px;">Internet connectivity data not yet available.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+      <div id="internet-chart" style="height:220px; margin-top:12px;"></div>
+    </div>
+
+    <div class="card">
+      <div class="section-header">
+        <span class="section-title">Infrastructure Status</span>
+        <span class="section-meta">Thermal signature assessment</span>
+      </div>
+      <div class="table-wrap">
+      <table>
+        <caption class="sr-only">Infrastructure facility status based on thermal signature assessment</caption>
+        <thead>
+          <tr>
+            <th scope="col">Facility</th>
+            <th scope="col">Type</th>
+            <th scope="col">Status</th>
+            <th scope="col" style="text-align:right">Fires</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for sig in infra_status %}
+          <tr>
+            <td style="font-weight:500">{{ sig.aoi.name }}</td>
+            <td style="color:var(--slate-lt)">{{ sig.facility_profile }}</td>
+            <td>
+              {% if sig.status == "damaged" %}
+                <span class="badge status-damaged">Damaged</span>
+              {% elif sig.status == "degraded" %}
+                <span class="badge status-degraded">Degraded</span>
+              {% elif sig.status == "offline" %}
+                <span class="badge status-offline">Offline</span>
+              {% else %}
+                <span class="badge status-operating">Operating</span>
+              {% endif %}
+            </td>
+            <td class="mono" style="text-align:right">{{ sig.fire_count }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="4" class="empty-state" style="text-align:center; padding:20px;">Thermal signature data not yet available.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+
+      {% if damaged_facilities %}
+      <div style="margin-top:14px; padding-top:10px; border-top:1px solid var(--border);">
+        <div style="font-size:13px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--red); margin-bottom:6px;">Damage Detected</div>
+        <div class="table-wrap">
+        <table>
+          <caption class="sr-only">Facilities with detected damage signatures</caption>
+          <thead>
+            <tr>
+              <th scope="col">Facility</th>
+              <th scope="col">Date</th>
+              <th scope="col" style="text-align:right">Fires</th>
+              <th scope="col" style="text-align:right">Max FRP (MW)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for d in damaged_facilities %}
+            <tr class="frp-high">
+              <td style="font-weight:500">{{ d.aoi.name }}</td>
+              <td class="mono">{{ d.date|date:"d M Y" }}</td>
+              <td class="mono" style="text-align:right">{{ d.fire_count }}</td>
+              <td class="mono" style="text-align:right; color:var(--red); font-weight:600;">{% if d.max_frp %}{{ d.max_frp|floatformat:1 }} MW{% else %}&mdash;{% endif %}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="section-header">
+      <span class="section-title">Recent Infrastructure Proximity Alerts</span>
+      <span class="section-meta">Thermal anomalies within 25km of monitored sites</span>
+    </div>
+    <div class="table-wrap">
+    <table>
+      <caption class="sr-only">Recent thermal anomalies detected near monitored infrastructure sites</caption>
+      <thead>
+        <tr>
+          <th scope="col">Detected (UTC)</th>
+          <th scope="col">Satellite</th>
+          <th scope="col">Nearest Infrastructure</th>
+          <th scope="col" style="text-align:right">Distance</th>
+          <th scope="col" style="text-align:right">FRP</th>
+          <th scope="col">Confidence</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for fire in recent_fires %}
+        <tr {% if fire.frp > 100 %}class="frp-high"{% endif %}>
+          <td class="mono">{{ fire.detected_at|date:"d M Y H:i" }}</td>
+          <td style="color:var(--slate-lt)">{{ fire.satellite }}</td>
+          <td style="font-weight:500">{{ fire.nearest_infrastructure.name }}</td>
+          <td class="mono" style="text-align:right">{{ fire.distance_to_infrastructure|floatformat:1 }} km</td>
+          <td class="mono" style="text-align:right; {% if fire.frp > 100 %}color:var(--red); font-weight:600;{% endif %}">{{ fire.frp|floatformat:1 }} MW</td>
+          <td class="conf-{{ fire.confidence }}">{% if fire.confidence == 'h' %}High{% elif fire.confidence == 'n' %}Nominal{% elif fire.confidence == 'l' %}Low{% else %}{{ fire.confidence|upper }}{% endif %}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" style="color:var(--slate-lt); text-align:center; padding:20px;">No infrastructure proximity alerts in the last 48h.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    <div class="conf-legend">
+      <span class="conf-h">High</span>
+      <span class="conf-n">Nominal</span>
+      <span class="conf-l">Low</span>
+      &mdash; VIIRS fire detection confidence levels
+    </div>
+  </div>
+
+</div>
+
+<footer class="footer">
+  <span>Data: NASA FIRMS &bull; NASA Black Marble VNP46A2 &bull; Copernicus CDSE &bull; IODA/Georgia Tech &bull; GDELT &bull; Open-source humanitarian monitoring</span>
+  <span>{{ today|date:"d M Y" }} &bull; Baseline period: 15 Jan – 27 Feb 2026</span>
+</footer>
+
+<script>
+(function () {
+  'use strict';
+
+  // ── City selector ──────────────────────────────────────
+  const CITY_AOIS = {{ city_aois_json|safe }};
+  const sel = document.getElementById('city-select');
+
+  CITY_AOIS.forEach(function (c) {
+    const opt = document.createElement('option');
+    opt.value = String(c.id);
+    opt.textContent = c.name;
+    sel.appendChild(opt);
+  });
+
+  sel.addEventListener('change', function () {
+    if (this.value) loadNightlight(this.value);
+  });
+
+  if (CITY_AOIS.length > 0) {
+    sel.value = String(CITY_AOIS[0].id);
+    loadNightlight(CITY_AOIS[0].id);
+  }
+
+  // ── Nightlight chart ──────────────────────────────────
+  function loadNightlight(aoiId) {
+    fetch('/api/nightlight/' + encodeURIComponent(aoiId) + '/')
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        var colors = (data.pct_change || []).map(function (v) {
+          return v < -20 ? '#c0392b' : v < 0 ? '#ed8936' : '#38a169';
+        });
+
+        var traces = [
+          {
+            x: data.dates,
+            y: data.mean_radiance,
+            type: 'scatter',
+            mode: 'lines+markers',
+            name: 'Radiance',
+            line: { color: '#2b6cb0', width: 2 },
+            marker: { size: 4 },
+            yaxis: 'y1',
+          },
+          {
+            x: data.dates,
+            y: data.pct_change,
+            type: 'bar',
+            name: '% vs baseline',
+            marker: { color: colors, opacity: 0.6 },
+            yaxis: 'y2',
+          },
+        ];
+
+        var shapes = [];
+        if (data.baseline_radiance) {
+          shapes.push({
+            type: 'line', xref: 'paper', x0: 0, x1: 1,
+            yref: 'y', y0: data.baseline_radiance, y1: data.baseline_radiance,
+            line: { color: '#718096', width: 1, dash: 'dot' },
+          });
+        }
+
+        var layout = {
+          margin: { t: 10, r: 60, b: 40, l: 60 },
+          font: { family: 'Inter, system-ui, sans-serif', size: 11, color: '#4a5568' },
+          paper_bgcolor: 'transparent',
+          plot_bgcolor: 'transparent',
+          legend: { x: 0, y: 1.1, orientation: 'h', font: { size: 10 } },
+          xaxis: { showgrid: false, tickfont: { size: 10 } },
+          yaxis: { title: 'Radiance (nW/cm\u00b2/sr)', showgrid: true, gridcolor: '#edf2f7', titlefont: { size: 10 } },
+          yaxis2: { title: '% Change', overlaying: 'y', side: 'right', showgrid: false, titlefont: { size: 10 } },
+          shapes: shapes,
+        };
+
+        Plotly.newPlot('nightlight-chart', traces, layout, { responsive: true, displayModeBar: false });
+      })
+      .catch(function () {
+        var el = document.getElementById('nightlight-chart');
+        el.textContent = 'No data available for this location.';
+        el.style.cssText = 'color:#718096;font-size:14px;padding:20px;display:flex;align-items:center;';
+      });
+  }
+
+  // ── Fire map ───────────────────────────────────────────
+  var map = L.map('fire-map', { center: [27, 51], zoom: 5 });
+
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+    attribution: '\u00a9 OpenStreetMap contributors \u00a9 CARTO',
+    maxZoom: 18,
+  }).addTo(map);
+
+  var infraSites = [
+    { name: 'Jebel Ali Desal', lat: 25.0077, lon: 55.0600, type: 'desalination' },
+    { name: 'Ras Al Khair Desal', lat: 27.4833, lon: 49.2167, type: 'desalination' },
+    { name: 'Jubail Desal', lat: 27.0046, lon: 49.6584, type: 'desalination' },
+    { name: 'Al Hidd Desal', lat: 26.1500, lon: 50.6500, type: 'desalination' },
+    { name: 'Ras Laffan Desal', lat: 25.9167, lon: 51.5333, type: 'desalination' },
+    { name: 'Ras Tanura Terminal', lat: 26.6333, lon: 50.1500, type: 'oil' },
+    { name: 'Abqaiq Processing', lat: 25.9378, lon: 49.6742, type: 'oil' },
+    { name: 'Bandar Abbas Port', lat: 27.1865, lon: 56.2808, type: 'oil' },
+    { name: 'Mina Al Ahmadi', lat: 29.0667, lon: 48.1500, type: 'oil' },
+    { name: 'Jebel Ali Port', lat: 25.0000, lon: 55.0300, type: 'oil' },
+  ];
+
+  infraSites.forEach(function (s) {
+    var color = s.type === 'desalination' ? '#2b6cb0' : '#b7791f';
+    var popup = L.popup().setContent(
+      document.createTextNode(s.name + ' \u2014 ' + s.type)
+    );
+    L.circleMarker([s.lat, s.lon], {
+      radius: 6, fillColor: color, color: color,
+      weight: 1, opacity: 0.9, fillOpacity: 0.5,
+    }).bindPopup(popup).addTo(map);
+  });
+
+  fetch('/api/fires/')
+    .then(function (r) { return r.json(); })
+    .then(function (geojson) {
+      geojson.features.forEach(function (f) {
+        var p = f.properties;
+        var coords = f.geometry.coordinates;
+        var lat = coords[1];
+        var lon = coords[0];
+        var frp = p.frp || 0;
+        var radius = Math.min(4 + frp / 20, 18);
+        var color = p.confidence === 'h' ? '#c0392b' : p.confidence === 'n' ? '#ed8936' : '#f6e05e';
+
+        var popupDiv = document.createElement('div');
+        var title = document.createElement('strong');
+        title.textContent = 'Fire Detection';
+        popupDiv.appendChild(title);
+
+        var addLine = function (label, value) {
+          var br = document.createElement('br');
+          var span = document.createElement('span');
+          span.textContent = label + ': ' + value;
+          popupDiv.appendChild(br);
+          popupDiv.appendChild(span);
+        };
+
+        addLine('FRP', frp.toFixed ? frp.toFixed(1) + ' MW' : '— MW');
+        addLine('Confidence', (p.confidence || '').toUpperCase());
+        addLine('Satellite', p.satellite || '—');
+        if (p.nearest_infrastructure) {
+          var distKm = p.distance_km ? p.distance_km.toFixed(1) : '?';
+          addLine('Near', p.nearest_infrastructure + ' (' + distKm + ' km)');
+        }
+
+        L.circleMarker([lat, lon], {
+          radius: radius, fillColor: color, color: '#c0392b',
+          weight: 1, opacity: 0.9, fillOpacity: 0.7,
+        }).bindPopup(L.popup().setContent(popupDiv)).addTo(map);
+      });
+    });
+
+  // ── Internet connectivity chart ─────────────────────
+  fetch('/api/internet/')
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      var traces = [];
+      var colors = ['#c0392b', '#e53e3e', '#ed8936', '#3182ce', '#38a169', '#805ad5', '#718096'];
+      var i = 0;
+      Object.keys(data).sort().forEach(function (country) {
+        var series = data[country];
+        traces.push({
+          x: series.dates,
+          y: series.connectivity,
+          type: 'scatter',
+          mode: 'lines+markers',
+          name: country,
+          line: { color: colors[i % colors.length], width: 1.5 },
+          marker: { size: 3 },
+        });
+        i++;
+      });
+
+      if (traces.length === 0) return;
+
+      var layout = {
+        margin: { t: 5, r: 10, b: 30, l: 40 },
+        font: { family: 'Inter, system-ui, sans-serif', size: 10, color: '#4a5568' },
+        paper_bgcolor: 'transparent',
+        plot_bgcolor: 'transparent',
+        legend: { x: 0, y: 1.15, orientation: 'h', font: { size: 9 } },
+        xaxis: { showgrid: false, tickfont: { size: 9 } },
+        yaxis: { title: 'Connectivity (0-1)', range: [0, 1], showgrid: true, gridcolor: '#edf2f7', titlefont: { size: 9 } },
+        shapes: [{
+          type: 'line', xref: 'paper', x0: 0, x1: 1,
+          yref: 'y', y0: 0.75, y1: 0.75,
+          line: { color: '#718096', width: 1, dash: 'dot' },
+        }],
+      };
+
+      Plotly.newPlot('internet-chart', traces, layout, { responsive: true, displayModeBar: false });
+    })
+    .catch(function () {});
+
+  // Map legend using DOM
+  var legend = L.control({ position: 'bottomright' });
+  legend.onAdd = function () {
+    var div = L.DomUtil.create('div');
+    div.style.background = '#fff';
+    div.style.padding = '10px 12px';
+    div.style.border = '1px solid #d1d9e0';
+    div.style.borderRadius = '3px';
+    div.style.fontSize = '11px';
+    div.style.fontFamily = 'Inter, sans-serif';
+    div.style.lineHeight = '1.7';
+
+    var makeRow = function (dotColor, label) {
+      var row = document.createElement('div');
+      var dot = document.createElement('span');
+      dot.textContent = '\u25cf ';
+      dot.style.color = dotColor;
+      var text = document.createTextNode(label);
+      row.appendChild(dot);
+      row.appendChild(text);
+      return row;
+    };
+
+    var heading = document.createElement('div');
+    heading.textContent = 'Legend';
+    heading.style.fontWeight = '600';
+    heading.style.marginBottom = '4px';
+    heading.style.color = '#1a2744';
+    div.appendChild(heading);
+    div.appendChild(makeRow('#c0392b', 'High-confidence fire'));
+    div.appendChild(makeRow('#ed8936', 'Nominal fire'));
+    div.appendChild(makeRow('#2b6cb0', 'Desalination plant'));
+    div.appendChild(makeRow('#b7791f', 'Oil / gas infrastructure'));
+    return div;
+  };
+  legend.addTo(map);
+
+}());
+</script>
+</body>
+</html>

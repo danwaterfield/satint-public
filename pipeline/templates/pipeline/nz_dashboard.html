@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="refresh" content="300">
+<title>NZ Migration Pressure Monitor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --navy:    #1a2744;
+    --navy-lt: #243358;
+    --slate-lt:#718096;
+    --border:  #d1d9e0;
+    --bg:      #f7f8fa;
+    --white:   #ffffff;
+    --text:    #1a202c;
+    --teal:    #0d9488;
+    --teal-lt: #f0fdfa;
+    --amber:   #b7791f;
+    --amber-lt:#fffbeb;
+    --red:     #c0392b;
+    --blue:    #2b6cb0;
+    --green:   #276749;
+    --font-mono: 'IBM Plex Mono', 'Courier New', monospace;
+    --font-sans: 'Inter', system-ui, sans-serif;
+    --radius: 3px;
+  }
+
+  *:focus-visible { outline: 2px solid #60a5fa; outline-offset: 2px; }
+
+  body { font-family: var(--font-sans); font-size: 14px; color: var(--text); background: var(--bg); line-height: 1.5; }
+
+  .topbar {
+    background: var(--navy); color: #fff;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 24px; height: 52px; border-bottom: 2px solid var(--teal);
+  }
+  .topbar-left { display: flex; align-items: baseline; gap: 16px; }
+  .topbar-title { font-size: 16px; font-weight: 600; letter-spacing: .02em; }
+  .topbar-sub { font-size: 13px; color: #a0b0c8; letter-spacing: .04em; text-transform: uppercase; }
+  .topbar-right { display: flex; align-items: center; gap: 20px; font-size: 13px; color: #a0b0c8; }
+  .topbar-date { font-family: var(--font-mono); font-size: 13px; }
+  .topbar-nav a { color: #a0b0c8; text-decoration: none; font-size: 13px; }
+  .topbar-nav a:hover { color: #fff; }
+
+  .main { padding: 20px 24px; display: grid; gap: 20px; }
+
+  .section-header {
+    display: flex; align-items: baseline; justify-content: space-between;
+    margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid var(--border);
+  }
+  .section-title { font-size: 13px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--navy); }
+  .section-meta { font-size: 13px; color: var(--slate-lt); }
+
+  .card { background: var(--white); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
+
+  .summary-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .stat-card { background: var(--white); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; }
+  .stat-label { font-size: 13px; text-transform: uppercase; letter-spacing: .07em; color: var(--slate-lt); margin-bottom: 4px; }
+  .stat-value { font-family: var(--font-mono); font-size: 22px; font-weight: 500; color: var(--navy); }
+  .stat-value.teal  { color: var(--teal); }
+  .stat-value.amber { color: var(--amber); }
+  .stat-value.red   { color: var(--red); }
+  .stat-sub { font-size: 13px; color: var(--slate-lt); margin-top: 2px; }
+
+  .pressure-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+  .pressure-card { border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; background: var(--white); border-left: 3px solid transparent; }
+  .pressure-card.surge    { border-left-color: var(--red); background: #fff5f5; }
+  .pressure-card.high     { border-left-color: var(--amber); background: var(--amber-lt); }
+  .pressure-card.elevated { border-left-color: var(--blue); }
+  .pressure-card.baseline { border-left-color: #68d391; }
+
+  .pressure-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+  .pressure-city { font-weight: 600; font-size: 14px; }
+  .badge { font-size: 13px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; padding: 2px 6px; border-radius: 2px; }
+  .badge-surge    { background: var(--red); color: #fff; }
+  .badge-high     { background: #ed8936; color: #fff; }
+  .badge-elevated { background: #3182ce; color: #fff; }
+  .badge-baseline { background: #38a169; color: #fff; }
+
+  .pressure-score { font-family: var(--font-mono); font-size: 22px; font-weight: 500; margin-bottom: 8px; }
+  .progress-track { background: #edf2f7; border-radius: 2px; height: 5px; margin-bottom: 8px; }
+  .progress-fill { height: 100%; border-radius: 2px; }
+  .sub-scores { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+  .sub-score-item { font-size: 13px; }
+  .sub-score-label { color: var(--slate-lt); }
+  .sub-score-val { font-family: var(--font-mono); font-weight: 500; }
+
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  #nz-map { height: 400px; border-radius: var(--radius); }
+  #pressure-chart { height: 260px; }
+  #nz-nightlight-chart { height: 320px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th {
+    text-align: left; font-size: 13px; font-weight: 600; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--slate-lt);
+    padding: 6px 10px; border-bottom: 1px solid var(--border); background: #f7f8fa;
+  }
+  td { padding: 7px 10px; border-bottom: 1px solid #edf2f7; vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #f7fafc; }
+  .mono { font-family: var(--font-mono); }
+  .pct-pos { color: var(--teal); font-weight: 500; }
+  .pct-neg { color: var(--red); font-weight: 500; }
+  .pct-neu { color: var(--slate-lt); }
+
+  .footer { border-top: 1px solid var(--border); padding: 12px 24px; font-size: 13px; color: var(--slate-lt); display: flex; justify-content: space-between; }
+
+  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .empty-state { color: var(--slate-lt); text-align: center; padding: 20px; font-size: 14px; }
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+
+  .city-select { font-family: var(--font-sans); font-size: 13px; padding: 4px 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--white); color: var(--text); }
+
+  @media (max-width: 900px) {
+    .summary-row { grid-template-columns: 1fr 1fr; }
+    .two-col { grid-template-columns: 1fr; }
+    .sub-scores { grid-template-columns: repeat(3, 1fr); }
+  }
+  @media (max-width: 600px) {
+    .summary-row { grid-template-columns: 1fr; }
+    .pressure-grid { grid-template-columns: 1fr; }
+    .sub-scores { grid-template-columns: repeat(2, 1fr); }
+    .topbar { flex-direction: column; height: auto; padding: 12px 16px; gap: 8px; }
+    .main { padding: 12px 12px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-left">
+    <span class="topbar-title">NZ Migration Pressure Monitor</span>
+    <span class="topbar-sub">Elite Capital Flight Detection</span>
+  </div>
+  <div class="topbar-right">
+    <span class="topbar-nav"><a href="/">&larr; Gulf Dashboard</a></span>
+    <span class="topbar-date">{{ today|date:"D, d M Y" }}</span>
+  </div>
+</header>
+
+<div class="main">
+
+  <div class="summary-row">
+    <div class="stat-card">
+      <div class="stat-label">Marina Observations</div>
+      <div class="stat-value teal">{{ marina_counts.count }}</div>
+      <div class="stat-sub">Sentinel-2 + SAR</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Airport Observations</div>
+      <div class="stat-value teal">{{ airport_counts.count }}</div>
+      <div class="stat-sub">Sentinel-2 bright-object</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">SAR Detections (14d)</div>
+      <div class="stat-value amber">{{ nz_sar.count }}</div>
+      <div class="stat-sub">Approach + marina</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Migration Indicators</div>
+      <div class="stat-value">{{ migration_indicators.count }}</div>
+      <div class="stat-sub">NZ locations tracked</div>
+    </div>
+  </div>
+
+  <div>
+    <div class="section-header">
+      <span class="section-title">Migration Pressure Indicators</span>
+      <span class="section-meta">Weighted composite: marina 25% &bull; airport 25% &bull; nightlight 15% &bull; SAR 15% &bull; Gulf push 20%</span>
+    </div>
+    <div class="pressure-grid">
+      {% for ind in migration_indicators %}
+      <div class="pressure-card {{ ind.pressure_level }}">
+        <div class="pressure-header">
+          <div class="pressure-city">{{ ind.aoi.name }}</div>
+          <span class="badge badge-{{ ind.pressure_level }}">{{ ind.pressure_level }}</span>
+        </div>
+        <div class="pressure-score">{{ ind.migration_pressure|floatformat:2 }}</div>
+        <div class="progress-track">
+          <div class="progress-fill" style="width:{% widthratio ind.migration_pressure 1 100 %}%; background:{% if ind.migration_pressure >= 0.7 %}#c0392b{% elif ind.migration_pressure >= 0.4 %}#ed8936{% elif ind.migration_pressure >= 0.2 %}#3182ce{% else %}#38a169{% endif %};"></div>
+        </div>
+        <div class="sub-scores">
+          <div class="sub-score-item">
+            <div class="sub-score-label">Marina</div>
+            <div class="sub-score-val">{{ ind.marina_score|floatformat:2 }}</div>
+          </div>
+          <div class="sub-score-item">
+            <div class="sub-score-label">Airport</div>
+            <div class="sub-score-val">{{ ind.airport_score|floatformat:2 }}</div>
+          </div>
+          <div class="sub-score-item">
+            <div class="sub-score-label">Lights</div>
+            <div class="sub-score-val">{{ ind.nightlight_score|floatformat:2 }}</div>
+          </div>
+          <div class="sub-score-item">
+            <div class="sub-score-label">SAR</div>
+            <div class="sub-score-val">{{ ind.sar_vessel_score|floatformat:2 }}</div>
+          </div>
+          <div class="sub-score-item">
+            <div class="sub-score-label">Gulf</div>
+            <div class="sub-score-val">{{ ind.gulf_push_score|floatformat:2 }}</div>
+          </div>
+        </div>
+      </div>
+      {% empty %}
+      <p class="empty-state" style="grid-column:1/-1">Migration pressure data not yet available.</p>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="two-col">
+    <div class="card">
+      <div class="section-header">
+        <span class="section-title">NZ Monitoring Locations</span>
+        <span class="section-meta">Marinas, airports, approaches</span>
+      </div>
+      <div id="nz-map" role="img" aria-label="NZ monitoring locations map"></div>
+    </div>
+
+    <div class="card">
+      <div class="section-header">
+        <span class="section-title">Migration Pressure Trend</span>
+        <span class="section-meta">30-day time series</span>
+      </div>
+      <div id="pressure-chart"></div>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <div class="card">
+      <div class="section-header">
+        <span class="section-title">Marina Vessel Counts</span>
+        <span class="section-meta">Sentinel-2 bright-object detection</span>
+      </div>
+      <div class="table-wrap">
+      <table>
+        <caption class="sr-only">Marina vessel counts from Sentinel-2 bright-object detection</caption>
+        <thead>
+          <tr>
+            <th scope="col">Marina</th>
+            <th scope="col">Date</th>
+            <th scope="col" style="text-align:right">Count</th>
+            <th scope="col" style="text-align:right">Baseline</th>
+            <th scope="col" style="text-align:right">Change</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in marina_counts %}
+          <tr>
+            <td style="font-weight:500">{{ c.aoi.name }}</td>
+            <td class="mono" style="color:var(--slate-lt)">{{ c.date|date:"d M Y" }}</td>
+            <td class="mono" style="text-align:right">{{ c.count }}</td>
+            <td class="mono" style="text-align:right">{% if c.baseline_count %}{{ c.baseline_count|floatformat:0 }}{% else %}&mdash;{% endif %}</td>
+            <td class="mono" style="text-align:right">
+              {% if c.pct_change != None %}
+                <span class="{% if c.pct_change > 10 %}pct-pos{% elif c.pct_change < -10 %}pct-neg{% else %}pct-neu{% endif %}">
+                  {% if c.pct_change > 0 %}+{% endif %}{{ c.pct_change|floatformat:1 }}%
+                </span>
+              {% else %}&mdash;{% endif %}
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="5" class="empty-state">No marina observation data yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="section-header">
+        <span class="section-title">Airport Aircraft Counts</span>
+        <span class="section-meta">Sentinel-2 apron monitoring</span>
+      </div>
+      <div class="table-wrap">
+      <table>
+        <caption class="sr-only">Airport aircraft counts from Sentinel-2 apron monitoring</caption>
+        <thead>
+          <tr>
+            <th scope="col">Airport</th>
+            <th scope="col">Date</th>
+            <th scope="col" style="text-align:right">Count</th>
+            <th scope="col" style="text-align:right">Baseline</th>
+            <th scope="col" style="text-align:right">Change</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in airport_counts %}
+          <tr>
+            <td style="font-weight:500">{{ c.aoi.name }}</td>
+            <td class="mono" style="color:var(--slate-lt)">{{ c.date|date:"d M Y" }}</td>
+            <td class="mono" style="text-align:right">{{ c.count }}</td>
+            <td class="mono" style="text-align:right">{% if c.baseline_count %}{{ c.baseline_count|floatformat:0 }}{% else %}&mdash;{% endif %}</td>
+            <td class="mono" style="text-align:right">
+              {% if c.pct_change != None %}
+                <span class="{% if c.pct_change > 10 %}pct-pos{% elif c.pct_change < -10 %}pct-neg{% else %}pct-neu{% endif %}">
+                  {% if c.pct_change > 0 %}+{% endif %}{{ c.pct_change|floatformat:1 }}%
+                </span>
+              {% else %}&mdash;{% endif %}
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="5" class="empty-state">No airport observation data yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="section-header">
+      <span class="section-title">SAR Vessel Detections — NZ</span>
+      <span class="section-meta">Sentinel-1 SAR — approaches &amp; marinas (14-day window)</span>
+    </div>
+    <div class="table-wrap">
+    <table>
+      <caption class="sr-only">SAR vessel detections for NZ approaches and marinas</caption>
+      <thead>
+        <tr>
+          <th scope="col">Location</th>
+          <th scope="col">Date</th>
+          <th scope="col" style="text-align:right">Vessels</th>
+          <th scope="col" style="text-align:right">Baseline</th>
+          <th scope="col" style="text-align:right">Change</th>
+          <th scope="col" style="text-align:right">Coverage</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in nz_sar %}
+        <tr>
+          <td style="font-weight:500">{{ s.chokepoint.name }}</td>
+          <td class="mono" style="color:var(--slate-lt)">{{ s.date|date:"d M Y" }}</td>
+          <td class="mono" style="text-align:right">{{ s.vessel_count }}</td>
+          <td class="mono" style="text-align:right">{% if s.baseline_count %}{{ s.baseline_count|floatformat:0 }}{% else %}&mdash;{% endif %}</td>
+          <td class="mono" style="text-align:right">
+            {% if s.pct_change != None %}
+              <span class="{% if s.pct_change > 15 %}pct-pos{% elif s.pct_change < -15 %}pct-neg{% else %}pct-neu{% endif %}">
+                {% if s.pct_change > 0 %}+{% endif %}{{ s.pct_change|floatformat:1 }}%
+              </span>
+            {% else %}&mdash;{% endif %}
+          </td>
+          <td class="mono" style="text-align:right">{% widthratio s.scene_coverage 1 100 %}%</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="empty-state">No SAR detection data yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="section-header">
+      <span class="section-title">NZ City Nightlights</span>
+      <span class="section-meta">Auckland &amp; Queenstown — economic activity proxy</span>
+    </div>
+
+    <div style="margin-bottom: 12px;">
+      <label for="nz-nl-city-select" style="font-size: 13px; color: var(--slate-lt); margin-right: 8px;">City:</label>
+      <select id="nz-nl-city-select" class="city-select">
+        <option value="all">All Cities</option>
+      </select>
+    </div>
+    <div id="nz-nightlight-chart"></div>
+
+    <div class="table-wrap" style="margin-top: 16px;">
+    <table>
+      <caption class="sr-only">NZ nightlight observations for Auckland and Queenstown</caption>
+      <thead>
+        <tr>
+          <th scope="col">City</th>
+          <th scope="col">Date</th>
+          <th scope="col">Source</th>
+          <th scope="col" style="text-align:right">Radiance (nW/cm&sup2;/sr)</th>
+          <th scope="col" style="text-align:right">Baseline (nW/cm&sup2;/sr)</th>
+          <th scope="col" style="text-align:right">Change</th>
+          <th scope="col" style="text-align:right">Cloud Fraction</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for obs in nz_nightlights %}
+        <tr>
+          <td style="font-weight:500">{{ obs.aoi.name }}</td>
+          <td class="mono" style="color:var(--slate-lt)">{{ obs.date|date:"d M Y" }}</td>
+          <td style="color:var(--slate-lt)">{{ obs.source }}</td>
+          <td class="mono" style="text-align:right">{{ obs.mean_radiance|floatformat:4 }} nW/cm&sup2;/sr</td>
+          <td class="mono" style="text-align:right">{% if obs.baseline_radiance %}{{ obs.baseline_radiance|floatformat:4 }} nW/cm&sup2;/sr{% else %}&mdash;{% endif %}</td>
+          <td class="mono" style="text-align:right">
+            {% if obs.pct_change != None %}
+              <span class="{% if obs.pct_change > 10 %}pct-pos{% elif obs.pct_change < -10 %}pct-neg{% else %}pct-neu{% endif %}">
+                {% if obs.pct_change > 0 %}+{% endif %}{{ obs.pct_change|floatformat:1 }}%
+              </span>
+            {% else %}&mdash;{% endif %}
+          </td>
+          <td class="mono" style="text-align:right">{{ obs.cloud_fraction|floatformat:2 }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7" class="empty-state">No NZ nightlight data yet. Awaiting VIIRS DNB observations for Auckland and Queenstown.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </div>
+
+</div>
+
+<footer class="footer">
+  <span>Data: Copernicus Sentinel-1 SAR &bull; Copernicus Sentinel-2 &bull; NASA VIIRS DNB &bull; Gulf crisis push-factor correlation</span>
+  <span>{{ today|date:"d M Y" }} &bull; NZ Elite Migration Signal Detection</span>
+</footer>
+
+<script>
+(function () {
+  'use strict';
+
+  // NZ map centred on Auckland
+  var map = L.map('nz-map', { center: [-38.5, 174], zoom: 5 });
+
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+    attribution: '\u00a9 OpenStreetMap \u00a9 CARTO',
+    maxZoom: 18,
+  }).addTo(map);
+
+  var nzSites = [
+    { name: 'Viaduct Harbour', lat: -36.8435, lon: 174.7594, type: 'marina', color: '#0d9488' },
+    { name: 'Westhaven Marina', lat: -36.8380, lon: 174.7490, type: 'marina', color: '#0d9488' },
+    { name: 'Silo Marina', lat: -36.8410, lon: 174.7570, type: 'marina', color: '#0d9488' },
+    { name: 'Half Moon Bay', lat: -36.8880, lon: 174.8980, type: 'marina', color: '#0d9488' },
+    { name: 'Queenstown Marina', lat: -45.0310, lon: 168.6570, type: 'marina', color: '#0d9488' },
+    { name: 'Auckland GA Apron', lat: -37.0082, lon: 174.7850, type: 'airport', color: '#b7791f' },
+    { name: 'Queenstown Airport', lat: -45.0211, lon: 168.7392, type: 'airport', color: '#b7791f' },
+    { name: 'Wanaka Airport', lat: -44.7222, lon: 169.2456, type: 'airport', color: '#b7791f' },
+  ];
+
+  nzSites.forEach(function (s) {
+    var popup = L.popup().setContent(
+      document.createTextNode(s.name + ' \u2014 ' + s.type)
+    );
+    L.circleMarker([s.lat, s.lon], {
+      radius: 7, fillColor: s.color, color: s.color,
+      weight: 1, opacity: 0.9, fillOpacity: 0.6,
+    }).bindPopup(popup).addTo(map);
+  });
+
+  // Approach zones as rectangles
+  L.rectangle([[-35.5, 172.0], [-34.0, 177.0]], {
+    color: '#3182ce', weight: 1, fillOpacity: 0.08, dashArray: '5,5',
+  }).bindPopup(L.popup().setContent(document.createTextNode('NZ North Approach'))).addTo(map);
+
+  L.rectangle([[-38.0, 177.0], [-35.0, 180.0]], {
+    color: '#3182ce', weight: 1, fillOpacity: 0.08, dashArray: '5,5',
+  }).bindPopup(L.popup().setContent(document.createTextNode('NZ East Approach'))).addTo(map);
+
+  // Legend
+  var legend = L.control({ position: 'bottomright' });
+  legend.onAdd = function () {
+    var div = L.DomUtil.create('div');
+    div.style.cssText = 'background:#fff;padding:10px 12px;border:1px solid #d1d9e0;border-radius:3px;font-size:13px;font-family:Inter,sans-serif;line-height:1.7';
+
+    var makeRow = function (dotColor, label) {
+      var row = document.createElement('div');
+      var dot = document.createElement('span');
+      dot.textContent = '\u25cf ';
+      dot.style.color = dotColor;
+      row.appendChild(dot);
+      row.appendChild(document.createTextNode(label));
+      return row;
+    };
+
+    var heading = document.createElement('div');
+    heading.textContent = 'Legend';
+    heading.style.cssText = 'font-weight:600;margin-bottom:4px;color:#1a2744';
+    div.appendChild(heading);
+    div.appendChild(makeRow('#0d9488', 'Marina'));
+    div.appendChild(makeRow('#b7791f', 'Airport'));
+    div.appendChild(makeRow('#3182ce', 'Approach zone'));
+    return div;
+  };
+  legend.addTo(map);
+
+  // Migration pressure time series
+  fetch('/api/nz/migration/')
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      var traces = [];
+      var colors = { 'Auckland': '#2b6cb0', 'Queenstown': '#0d9488' };
+
+      Object.keys(data).forEach(function (city) {
+        var d = data[city];
+        traces.push({
+          x: d.dates,
+          y: d.pressure,
+          type: 'scatter',
+          mode: 'lines+markers',
+          name: city,
+          line: { color: colors[city] || '#4a5568', width: 2 },
+          marker: { size: 4 },
+        });
+      });
+
+      if (traces.length === 0) {
+        var el = document.getElementById('pressure-chart');
+        el.textContent = 'No migration pressure data yet.';
+        el.style.cssText = 'color:#718096;font-size:14px;padding:20px;display:flex;align-items:center;';
+        return;
+      }
+
+      var layout = {
+        margin: { t: 10, r: 20, b: 40, l: 50 },
+        font: { family: 'Inter, system-ui, sans-serif', size: 13, color: '#4a5568' },
+        paper_bgcolor: 'transparent',
+        plot_bgcolor: 'transparent',
+        legend: { x: 0, y: 1.1, orientation: 'h', font: { size: 13 } },
+        xaxis: { showgrid: false, tickfont: { size: 13 } },
+        yaxis: { title: 'Migration Pressure', range: [0, 1], showgrid: true, gridcolor: '#edf2f7', titlefont: { size: 13 } },
+      };
+
+      Plotly.newPlot('pressure-chart', traces, layout, { responsive: true, displayModeBar: false });
+    })
+    .catch(function () {
+      var el = document.getElementById('pressure-chart');
+      el.textContent = 'Failed to load migration pressure data.';
+      el.style.cssText = 'color:#718096;font-size:14px;padding:20px;';
+    });
+
+  // -----------------------------------------------------------------------
+  // NZ Nightlight time series chart
+  // -----------------------------------------------------------------------
+  var nzCityAois = JSON.parse('{{ nz_city_aois_json|escapejs }}' || '[]');
+
+  // Build nightlight data from template context (inline JSON)
+  var nlData = [];
+  {% for obs in nz_nightlights %}
+  nlData.push({
+    city: '{{ obs.aoi.name|escapejs }}',
+    aoi_id: {{ obs.aoi.id }},
+    date: '{{ obs.date|date:"Y-m-d" }}',
+    radiance: {{ obs.mean_radiance|default:"null" }},
+    baseline: {{ obs.baseline_radiance|default:"null" }},
+    pct_change: {{ obs.pct_change|default:"null" }},
+    cloud: {{ obs.cloud_fraction|default:"null" }},
+  });
+  {% endfor %}
+
+  // Populate city selector
+  var citySelect = document.getElementById('nz-nl-city-select');
+  var cityNames = [];
+  nlData.forEach(function (d) {
+    if (cityNames.indexOf(d.city) === -1) cityNames.push(d.city);
+  });
+  cityNames.forEach(function (c) {
+    var opt = document.createElement('option');
+    opt.value = c;
+    opt.textContent = c;
+    citySelect.appendChild(opt);
+  });
+
+  function renderNightlightChart(filter) {
+    var filtered = filter === 'all' ? nlData : nlData.filter(function (d) { return d.city === filter; });
+
+    // Group by city
+    var grouped = {};
+    filtered.forEach(function (d) {
+      if (!grouped[d.city]) grouped[d.city] = { dates: [], radiance: [], pct: [], baseline: [] };
+      grouped[d.city].dates.push(d.date);
+      grouped[d.city].radiance.push(d.radiance);
+      grouped[d.city].pct.push(d.pct_change);
+      grouped[d.city].baseline.push(d.baseline);
+    });
+
+    var traces = [];
+    var colors = { 'Auckland': '#2b6cb0', 'Queenstown': '#0d9488' };
+    var colorIdx = 0;
+    var fallbackColors = ['#e53e3e', '#d69e2e', '#805ad5', '#38a169'];
+
+    Object.keys(grouped).forEach(function (city) {
+      var g = grouped[city];
+      var c = colors[city] || fallbackColors[colorIdx++ % fallbackColors.length];
+
+      // Sort by date
+      var indices = g.dates.map(function (_, i) { return i; });
+      indices.sort(function (a, b) { return g.dates[a] < g.dates[b] ? -1 : 1; });
+      var sortedDates = indices.map(function (i) { return g.dates[i]; });
+      var sortedRad = indices.map(function (i) { return g.radiance[i]; });
+      var sortedPct = indices.map(function (i) { return g.pct[i]; });
+
+      traces.push({
+        x: sortedDates,
+        y: sortedRad,
+        type: 'scatter',
+        mode: 'lines+markers',
+        name: city + ' (radiance)',
+        line: { color: c, width: 2 },
+        marker: { size: 5 },
+        hovertemplate: '%{x}<br>Radiance: %{y:.4f} nW/cm\u00b2/sr<extra>' + city + '</extra>',
+      });
+
+      // Add baseline reference if available
+      var baselineVal = null;
+      for (var i = 0; i < g.baseline.length; i++) {
+        if (g.baseline[i] !== null) { baselineVal = g.baseline[i]; break; }
+      }
+      if (baselineVal !== null && sortedDates.length > 1) {
+        traces.push({
+          x: [sortedDates[0], sortedDates[sortedDates.length - 1]],
+          y: [baselineVal, baselineVal],
+          type: 'scatter',
+          mode: 'lines',
+          name: city + ' baseline',
+          line: { color: c, width: 1, dash: 'dash' },
+          showlegend: true,
+          hovertemplate: 'Baseline: %{y:.4f} nW/cm\u00b2/sr<extra>' + city + '</extra>',
+        });
+      }
+    });
+
+    var chartEl = document.getElementById('nz-nightlight-chart');
+
+    if (traces.length === 0) {
+      chartEl.textContent = 'No NZ nightlight data yet. Awaiting VIIRS DNB observations.';
+      chartEl.style.cssText = 'color:#718096;font-size:14px;padding:20px;display:flex;align-items:center;justify-content:center;';
+      return;
+    }
+
+    var layout = {
+      margin: { t: 10, r: 20, b: 40, l: 60 },
+      font: { family: 'Inter, system-ui, sans-serif', size: 13, color: '#4a5568' },
+      paper_bgcolor: 'transparent',
+      plot_bgcolor: 'transparent',
+      legend: { x: 0, y: 1.12, orientation: 'h', font: { size: 13 } },
+      xaxis: { showgrid: false, tickfont: { size: 13 } },
+      yaxis: { title: 'Radiance (nW/cm\u00b2/sr)', showgrid: true, gridcolor: '#edf2f7', titlefont: { size: 13 }, tickfont: { size: 13 } },
+    };
+
+    Plotly.newPlot('nz-nightlight-chart', traces, layout, { responsive: true, displayModeBar: false });
+  }
+
+  renderNightlightChart('all');
+
+  citySelect.addEventListener('change', function () {
+    renderNightlightChart(this.value);
+  });
+
+}());
+</script>
+</body>
+</html>

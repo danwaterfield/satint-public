@@ -15,13 +15,11 @@
   :root {
     --navy:    #1a2744;
     --navy-lt: #243358;
-    --slate:   #4a5568;
     --slate-lt:#718096;
     --border:  #d1d9e0;
     --bg:      #f7f8fa;
     --white:   #ffffff;
     --text:    #1a202c;
-    --text-lt: #4a5568;
     --red:     #c0392b;
     --red-lt:  #fff0ef;
     --amber:   #b7791f;
@@ -34,7 +32,9 @@
     --radius: 3px;
   }
 
-  body { font-family: var(--font-sans); font-size: 13px; color: var(--text); background: var(--bg); line-height: 1.5; }
+  body { font-family: var(--font-sans); font-size: 14px; color: var(--text); background: var(--bg); line-height: 1.5; }
+
+  *:focus-visible { outline: 2px solid #60a5fa; outline-offset: 2px; }
 
   .topbar {
     background: var(--navy); color: #fff;
@@ -60,19 +60,19 @@
     display: flex; align-items: baseline; justify-content: space-between;
     margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid var(--border);
   }
-  .section-title { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--navy); }
+  .section-title { font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--navy); }
   .section-meta { font-size: 11px; color: var(--slate-lt); }
 
   .card { background: var(--white); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
 
   .summary-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
   .stat-card { background: var(--white); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; }
-  .stat-label { font-size: 10px; text-transform: uppercase; letter-spacing: .07em; color: var(--slate-lt); margin-bottom: 4px; }
+  .stat-label { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--slate-lt); margin-bottom: 4px; }
   .stat-value { font-family: var(--font-mono); font-size: 22px; font-weight: 500; color: var(--navy); }
   .stat-value.red   { color: var(--red); }
   .stat-value.amber { color: var(--amber); }
   .stat-value.green { color: var(--green); }
-  .stat-sub { font-size: 10px; color: var(--slate-lt); margin-top: 2px; }
+  .stat-sub { font-size: 11px; color: var(--slate-lt); margin-top: 2px; }
 
   .risk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
   .risk-card { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; background: var(--white); border-left: 3px solid transparent; }
@@ -86,7 +86,7 @@
   .risk-city { font-weight: 600; font-size: 13px; }
   .risk-country { font-size: 10px; color: var(--slate-lt); margin-top: 1px; }
 
-  .badge { font-size: 9px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; padding: 2px 6px; border-radius: 2px; }
+  .badge { font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; padding: 2px 6px; border-radius: 2px; min-width: 56px; text-align: center; display: inline-block; }
   .badge-emergency { background: var(--red); color: #fff; }
   .badge-critical  { background: #e53e3e; color: #fff; }
   .badge-high      { background: #ed8936; color: #fff; }
@@ -134,6 +134,7 @@
   .pct-neg { color: var(--red); font-weight: 500; }
   .pct-neu { color: var(--slate-lt); }
   .frp-high td { background: #fff8f8; }
+  tr.frp-high:hover td { background: #fff0ef; }
   .conf-h { color: var(--red); font-weight: 600; }
   .conf-n { color: var(--amber); }
   .conf-l { color: var(--slate-lt); }
@@ -164,10 +165,26 @@
   #nz-map { height: 380px; border-radius: var(--radius); }
   #nz-pressure-chart { height: 260px; }
 
+  select.ctrl-select:focus { outline: 2px solid var(--blue); outline-offset: 1px; }
+  .tab-btn:focus-visible { outline: 2px solid #60a5fa; outline-offset: 2px; }
+
+  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0; }
+
+  .nz-summary { grid-template-columns: repeat(4, 1fr); }
+
   @media (max-width: 900px) {
     .summary-row { grid-template-columns: 1fr 1fr; }
     .two-col { grid-template-columns: 1fr; }
     .risk-grid { grid-template-columns: 1fr 1fr; }
+  }
+
+  @media (max-width: 768px) {
+    .summary-row { grid-template-columns: 1fr; }
+    .risk-grid { grid-template-columns: 1fr; }
+    .two-col { grid-template-columns: 1fr; }
+    .nz-summary { grid-template-columns: 1fr 1fr; }
   }
 </style>
 </head>
@@ -187,12 +204,13 @@
 
 <div id="alert-banner" style="display:none" class="alert-banner"></div>
 
-<div class="tab-bar">
-  <button class="tab-btn active" onclick="switchTab('gulf')">Gulf Crisis Monitor</button>
-  <button class="tab-btn" onclick="switchTab('nz')">NZ Migration Signal</button>
+<div class="tab-bar" role="tablist">
+  <button class="tab-btn active" id="tab-btn-gulf" role="tab" aria-selected="true" aria-controls="tab-gulf" data-tab="gulf" type="button">Gulf Crisis Monitor</button>
+  <button class="tab-btn" id="tab-btn-nz" role="tab" aria-selected="false" aria-controls="tab-nz" data-tab="nz" type="button">NZ Migration Signal</button>
 </div>
 
-<div class="main tab-section active" id="tab-gulf">
+<main>
+<div class="main tab-section active" id="tab-gulf" role="tabpanel" aria-labelledby="tab-btn-gulf">
 
   <!-- Summary row -->
   <div class="summary-row">
@@ -212,7 +230,7 @@
       <div class="stat-sub">Within 25 km of known sites</div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">Nightlight Data Points</div>
+      <div class="stat-label">Cities Monitored</div>
       <div class="stat-value green" id="stat-nl">—</div>
       <div class="stat-sub" id="stat-nl-sub">Latest — VNP46A2 / DNB</div>
     </div>
@@ -227,7 +245,7 @@
   <div>
     <div class="section-header">
       <span class="section-title">Compound Risk Indicators</span>
-      <span class="section-meta">Weighted composite: nightlight 35% &bull; fire activity 35% &bull; trade flow 30%</span>
+      <span class="section-meta">Weighted composite: nightlight 20% &bull; fire 15% &bull; trade 15% &bull; NO&#8322; 12% &bull; internet 12% &bull; flights 10% &bull; GDELT 8% &bull; thermal 8%</span>
     </div>
     <div class="risk-grid" id="risk-grid">
       <p class="empty-state" style="grid-column:1/-1">Loading risk data…</p>
@@ -253,20 +271,23 @@
         <span class="section-title">Maritime Chokepoint Traffic</span>
         <span class="section-meta">Vessel transits vs. pre-war baseline</span>
       </div>
+      <div class="table-wrap">
       <table>
+        <caption class="sr-only">Maritime chokepoint vessel transit counts vs pre-war baseline</caption>
         <thead>
           <tr>
-            <th>Chokepoint</th>
-            <th>Source</th>
-            <th style="text-align:right">Count</th>
-            <th style="text-align:right">Baseline</th>
-            <th style="text-align:right">Change</th>
+            <th scope="col">Chokepoint</th>
+            <th scope="col">Source</th>
+            <th scope="col" style="text-align:right">Count</th>
+            <th scope="col" style="text-align:right">Baseline</th>
+            <th scope="col" style="text-align:right">Change</th>
           </tr>
         </thead>
         <tbody id="vessel-tbody">
           <tr><td colspan="5" class="empty-state">Loading…</td></tr>
         </tbody>
       </table>
+      </div>
     </div>
   </div>
 
@@ -277,7 +298,7 @@
         <span class="section-title">Active Fire Detections</span>
         <span class="section-meta">VIIRS SNPP &amp; NOAA-20 &bull; 48-hour window</span>
       </div>
-      <div id="fire-map"></div>
+      <div id="fire-map" role="img" aria-label="Active fire detection map showing Gulf region"></div>
     </div>
 
     <div class="card">
@@ -285,19 +306,22 @@
         <span class="section-title">Nightlight Deviation by City</span>
         <span class="section-meta">% change from pre-war baseline</span>
       </div>
+      <div class="table-wrap">
       <table>
+        <caption class="sr-only">Nightlight deviation by city compared to pre-war baseline</caption>
         <thead>
           <tr>
-            <th>City</th>
-            <th>Country</th>
-            <th style="text-align:right">Change</th>
-            <th>Trend</th>
+            <th scope="col">City</th>
+            <th scope="col">Source</th>
+            <th scope="col" style="text-align:right">Change</th>
+            <th scope="col">Trend</th>
           </tr>
         </thead>
         <tbody id="nl-tbody">
           <tr><td colspan="4" class="empty-state">Loading…</td></tr>
         </tbody>
       </table>
+      </div>
     </div>
   </div>
 
@@ -308,20 +332,23 @@
         <span class="section-title">Internet Connectivity</span>
         <span class="section-meta">IODA / Google Transparency Report (0 = offline, 1 = normal)</span>
       </div>
+      <div class="table-wrap">
       <table>
+        <caption class="sr-only">Internet connectivity scores by country</caption>
         <thead>
           <tr>
-            <th>Country</th>
-            <th style="text-align:right">Score</th>
-            <th style="text-align:right">Min</th>
-            <th style="text-align:right">vs Baseline</th>
-            <th>Status</th>
+            <th scope="col">Country</th>
+            <th scope="col" style="text-align:right">Score</th>
+            <th scope="col" style="text-align:right">Min</th>
+            <th scope="col" style="text-align:right">vs Baseline</th>
+            <th scope="col">Status</th>
           </tr>
         </thead>
         <tbody id="inet-tbody">
           <tr><td colspan="5" class="empty-state">Loading…</td></tr>
         </tbody>
       </table>
+      </div>
       <div style="margin-top:12px">
         <div class="chart-controls">
           <label for="inet-country-select">Country</label>
@@ -336,37 +363,43 @@
         <span class="section-title">Infrastructure Status</span>
         <span class="section-meta">Thermal signature monitoring — desalination, oil, power, LNG</span>
       </div>
+      <div class="table-wrap">
       <table>
+        <caption class="sr-only">Infrastructure facility status from thermal signature monitoring</caption>
         <thead>
           <tr>
-            <th>Facility</th>
-            <th>Type</th>
-            <th>Status</th>
-            <th style="text-align:right">Fires</th>
-            <th style="text-align:right">Max FRP</th>
+            <th scope="col">Facility</th>
+            <th scope="col">Type</th>
+            <th scope="col">Status</th>
+            <th scope="col" style="text-align:right">Fires</th>
+            <th scope="col" style="text-align:right">Max FRP (MW)</th>
           </tr>
         </thead>
         <tbody id="infra-tbody">
           <tr><td colspan="5" class="empty-state">Loading…</td></tr>
         </tbody>
       </table>
+      </div>
       <div style="margin-top:12px">
         <div class="section-header">
           <span class="section-title" style="font-size:10px">Damage Detected</span>
         </div>
+        <div class="table-wrap">
         <table>
+          <caption class="sr-only">Infrastructure damage events detected via thermal signatures</caption>
           <thead>
             <tr>
-              <th>Facility</th>
-              <th>Date</th>
-              <th style="text-align:right">Fires</th>
-              <th style="text-align:right">Max FRP</th>
+              <th scope="col">Facility</th>
+              <th scope="col">Date</th>
+              <th scope="col" style="text-align:right">Fires</th>
+              <th scope="col" style="text-align:right">Max FRP (MW)</th>
             </tr>
           </thead>
           <tbody id="damage-tbody">
             <tr><td colspan="4" class="empty-state">Loading…</td></tr>
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   </div>
@@ -377,29 +410,62 @@
       <span class="section-title">Recent Infrastructure Proximity Alerts</span>
       <span class="section-meta">Thermal anomalies within 25 km of monitored sites</span>
     </div>
+    <div class="table-wrap">
     <table>
+      <caption class="sr-only">Recent thermal anomalies near monitored infrastructure</caption>
       <thead>
         <tr>
-          <th>Detected (UTC)</th>
-          <th>Satellite</th>
-          <th>Nearest Infrastructure</th>
-          <th style="text-align:right">Distance</th>
-          <th style="text-align:right">FRP (MW)</th>
-          <th>Confidence</th>
+          <th scope="col">Detected (UTC)</th>
+          <th scope="col">Satellite</th>
+          <th scope="col">Nearest Infrastructure</th>
+          <th scope="col" style="text-align:right">Distance</th>
+          <th scope="col" style="text-align:right">FRP (MW)</th>
+          <th scope="col">Confidence</th>
         </tr>
       </thead>
       <tbody id="fire-tbody">
         <tr><td colspan="6" class="empty-state">Loading…</td></tr>
       </tbody>
     </table>
+    </div>
+  </div>
+
+  <!-- Flight Activity -->
+  <div class="card">
+    <div class="section-header">
+      <span class="section-title">Airport Flight Activity</span>
+      <span class="section-meta">OpenSky ADS-B — daily arrivals + departures (0 = no coverage or airspace closure)</span>
+    </div>
+    <div style="margin-bottom:12px">
+      <label for="flight-airport-select" style="font-size:13px;color:var(--slate-lt);margin-right:8px">Airport:</label>
+      <select id="flight-airport-select" class="city-select"></select>
+    </div>
+    <div id="flight-chart" style="height:300px"></div>
+    <div class="table-wrap" style="margin-top:16px">
+    <table>
+      <caption class="sr-only">Airport flight activity counts</caption>
+      <thead>
+        <tr>
+          <th scope="col">Airport</th>
+          <th scope="col">Date</th>
+          <th scope="col" style="text-align:right">Arrivals</th>
+          <th scope="col" style="text-align:right">Departures</th>
+          <th scope="col" style="text-align:right">Total</th>
+        </tr>
+      </thead>
+      <tbody id="flight-tbody">
+        <tr><td colspan="5" class="empty-state">Loading&hellip;</td></tr>
+      </tbody>
+    </table>
+    </div>
   </div>
 
 </div>
 
 <!-- NZ Migration Signal Tab -->
-<div class="main tab-section" id="tab-nz">
+<div class="main tab-section" id="tab-nz" role="tabpanel" aria-labelledby="tab-btn-nz">
 
-  <div class="summary-row" style="grid-template-columns: repeat(4, 1fr);">
+  <div class="summary-row nz-summary">
     <div class="stat-card">
       <div class="stat-label">Marina Observations</div>
       <div class="stat-value nz-teal" id="nz-stat-marina">—</div>
@@ -440,7 +506,7 @@
         <span class="section-title">NZ Monitoring Locations</span>
         <span class="section-meta">Marinas, airports, approaches</span>
       </div>
-      <div id="nz-map"></div>
+      <div id="nz-map" role="img" aria-label="New Zealand migration monitoring map"></div>
     </div>
     <div class="card">
       <div class="section-header">
@@ -462,24 +528,30 @@
         <span class="section-title">Marina Vessel Counts</span>
         <span class="section-meta">Sentinel-2 bright-object detection</span>
       </div>
+      <div class="table-wrap">
       <table>
-        <thead><tr><th>Marina</th><th>Date</th><th style="text-align:right">Count</th><th style="text-align:right">Baseline</th><th style="text-align:right">Change</th></tr></thead>
+        <caption class="sr-only">Marina vessel counts from Sentinel-2 monitoring</caption>
+        <thead><tr><th scope="col">Marina</th><th scope="col">Date</th><th scope="col" style="text-align:right">Count</th><th scope="col" style="text-align:right">Baseline</th><th scope="col" style="text-align:right">Change</th></tr></thead>
         <tbody id="nz-marina-tbody">
           <tr><td colspan="5" class="empty-state">Loading…</td></tr>
         </tbody>
       </table>
+      </div>
     </div>
     <div class="card">
       <div class="section-header">
         <span class="section-title">Airport Aircraft Counts</span>
         <span class="section-meta">Sentinel-2 apron monitoring</span>
       </div>
+      <div class="table-wrap">
       <table>
-        <thead><tr><th>Airport</th><th>Date</th><th style="text-align:right">Count</th><th style="text-align:right">Baseline</th><th style="text-align:right">Change</th></tr></thead>
+        <caption class="sr-only">Airport aircraft counts from Sentinel-2 monitoring</caption>
+        <thead><tr><th scope="col">Airport</th><th scope="col">Date</th><th scope="col" style="text-align:right">Count</th><th scope="col" style="text-align:right">Baseline</th><th scope="col" style="text-align:right">Change</th></tr></thead>
         <tbody id="nz-airport-tbody">
           <tr><td colspan="5" class="empty-state">Loading…</td></tr>
         </tbody>
       </table>
+      </div>
     </div>
   </div>
 
@@ -489,15 +561,19 @@
       <span class="section-title">SAR Vessel Detections — NZ</span>
       <span class="section-meta">Sentinel-1 SAR — approaches &amp; marinas</span>
     </div>
+    <div class="table-wrap">
     <table>
-      <thead><tr><th>Location</th><th>Date</th><th style="text-align:right">Vessels</th><th style="text-align:right">Baseline</th><th style="text-align:right">Change</th><th style="text-align:right">Coverage</th></tr></thead>
+      <caption class="sr-only">SAR vessel detections for NZ monitoring locations</caption>
+      <thead><tr><th scope="col">Location</th><th scope="col">Date</th><th scope="col" style="text-align:right">Vessels</th><th scope="col" style="text-align:right">Baseline</th><th scope="col" style="text-align:right">Change</th><th scope="col" style="text-align:right">Coverage</th></tr></thead>
       <tbody id="nz-sar-tbody">
         <tr><td colspan="6" class="empty-state">Loading…</td></tr>
       </tbody>
     </table>
+    </div>
   </div>
 
 </div>
+</main>
 
 <footer class="footer">
   <span>Data: NASA FIRMS &bull; NASA Black Marble VNP46A2 &bull; VIIRS DNB L1B &bull; Sentinel-1 SAR via ASF DAAC &bull; IODA / Georgia Tech &bull; Open-source humanitarian monitoring</span>
@@ -536,16 +612,21 @@ function setText(id, v) { var e = document.getElementById(id); if (e) e.textCont
 
 function pctSpan(v) {
   var s = el('span');
-  if (v == null) { s.textContent = '—'; s.className = 'pct-neu'; return s; }
+  if (v == null) { s.textContent = '\u2014'; s.className = 'pct-neu'; return s; }
   s.textContent = (v > 0 ? '+' : '') + v.toFixed(1) + '%';
-  s.className = v < -20 ? 'pct-neg' : v < 0 ? 'pct-neu' : 'pct-pos';
+  s.className = v < 0 ? 'pct-neg' : v > 0 ? 'pct-pos' : 'pct-neu';
   return s;
 }
 
 function fmtDate(iso) {
   if (!iso) return '—';
   var d = new Date(iso);
-  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' });
+  var y = d.getUTCFullYear();
+  var m = String(d.getUTCMonth() + 1).padStart(2, '0');
+  var day = String(d.getUTCDate()).padStart(2, '0');
+  var hh = String(d.getUTCHours()).padStart(2, '0');
+  var mm = String(d.getUTCMinutes()).padStart(2, '0');
+  return y + '-' + m + '-' + day + ' ' + hh + ':' + mm;
 }
 
 function todayStr() {
@@ -576,9 +657,11 @@ function renderNightlightChart(cityName) {
 
   var traces = [
     { x: dates, y: radiance, type: 'scatter', mode: 'lines+markers', name: 'Radiance',
-      line: { color: '#2b6cb0', width: 2 }, marker: { size: 4 }, yaxis: 'y1' },
+      line: { color: '#2b6cb0', width: 2 }, marker: { size: 4 }, yaxis: 'y1',
+      hovertemplate: '%{x}<br>%{y:.4f} nW/cm\u00b2/sr<extra></extra>' },
     { x: dates, y: pct, type: 'bar', name: '% vs baseline',
-      marker: { color: colors, opacity: 0.6 }, yaxis: 'y2' },
+      marker: { color: colors, opacity: 0.6 }, yaxis: 'y2',
+      hovertemplate: '%{x}<br>%{y:.1f}%<extra></extra>' },
   ];
 
   var shapes = [];
@@ -587,6 +670,9 @@ function renderNightlightChart(cityName) {
       yref: 'y', y0: baseline, y1: baseline,
       line: { color: '#718096', width: 1, dash: 'dot' } });
   }
+  shapes.push({ type: 'line', xref: 'paper', x0: 0, x1: 1,
+    yref: 'y2', y0: 0, y1: 0,
+    line: { color: '#a0aec0', width: 1, dash: 'dash' } });
 
   Plotly.newPlot('nightlight-chart', traces, {
     margin: { t: 10, r: 60, b: 40, l: 60 },
@@ -594,9 +680,14 @@ function renderNightlightChart(cityName) {
     paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
     legend: { x: 0, y: 1.1, orientation: 'h', font: { size: 10 } },
     xaxis: { showgrid: false, tickfont: { size: 10 } },
-    yaxis: { title: 'Radiance (nW/cm²/sr)', showgrid: true, gridcolor: '#edf2f7', titlefont: { size: 10 } },
-    yaxis2: { title: '% Change', overlaying: 'y', side: 'right', showgrid: false, titlefont: { size: 10 } },
+    yaxis: { title: 'Radiance (nW/cm\u00b2/sr)', showgrid: true, gridcolor: '#edf2f7', titlefont: { size: 10 }, automargin: true },
+    yaxis2: { title: '% Change', overlaying: 'y', side: 'right', showgrid: false, titlefont: { size: 10 }, automargin: true },
     shapes: shapes,
+    annotations: baseline ? [{
+      x: 0, xref: 'paper', y: baseline, yref: 'y',
+      text: 'Pre-war baseline', showarrow: false,
+      font: { size: 9, color: '#718096' }, xanchor: 'left'
+    }] : [],
   }, { responsive: true, displayModeBar: false });
 }
 
@@ -608,7 +699,7 @@ function renderRisk(riskData) {
   var indicators = riskData.indicators || [];
   if (!indicators.length) {
     grid.appendChild(el('p', { class: 'empty-state', style: 'grid-column:1/-1' },
-      'No risk data. Run calculate_compound_indicators task to populate.'));
+      'Risk data not yet available for today.'));
     return;
   }
 
@@ -627,15 +718,16 @@ function renderRisk(riskData) {
     header.appendChild(el('span', { class: 'badge badge-' + ind.alert_level }, ind.alert_level));
     card.appendChild(header);
 
-    card.appendChild(el('div', { class: 'risk-score' }, ind.compound_risk.toFixed(3)));
+    card.appendChild(el('div', { class: 'risk-score' }, ind.compound_risk != null ? ind.compound_risk.toFixed(2) : '\u2014'));
 
+    var crVal = ind.compound_risk || 0;
     var track = el('div', { class: 'progress-track' });
-    var fillColor = ind.compound_risk >= 0.8 ? '#c0392b'
-                  : ind.compound_risk >= 0.6 ? '#e53e3e'
-                  : ind.compound_risk >= 0.4 ? '#ed8936'
-                  : ind.compound_risk >= 0.2 ? '#3182ce' : '#38a169';
+    var fillColor = crVal >= 0.8 ? '#c0392b'
+                  : crVal >= 0.6 ? '#e53e3e'
+                  : crVal >= 0.4 ? '#ed8936'
+                  : crVal >= 0.2 ? '#3182ce' : '#38a169';
     var fill = el('div', { class: 'progress-fill' });
-    fill.style.width = Math.min(100, ind.compound_risk * 100).toFixed(1) + '%';
+    fill.style.width = Math.min(100, crVal * 100).toFixed(1) + '%';
     fill.style.background = fillColor;
     track.appendChild(fill);
     card.appendChild(track);
@@ -645,7 +737,7 @@ function renderRisk(riskData) {
       .forEach(function (pair) {
         var item = el('div', { class: 'sub-score-item' });
         item.appendChild(el('div', { class: 'sub-score-label' }, pair[0]));
-        item.appendChild(el('div', { class: 'sub-score-val' }, pair[1].toFixed(2)));
+        item.appendChild(el('div', { class: 'sub-score-val' }, pair[1] != null ? pair[1].toFixed(2) : '\u2014'));
         subs.appendChild(item);
       });
     card.appendChild(subs);
@@ -703,13 +795,15 @@ function renderNLTable(nlAllData) {
     var barTd = el('td');
     var wrap = el('div', { class: 'nl-bar-wrap' });
     var track = el('div', { class: 'nl-bar-track' });
-    if (r.latest.pct_change != null && r.latest.pct_change < 0) {
+    if (r.latest.pct_change != null) {
       var fill = el('div', { class: 'nl-bar-fill' });
       var w = Math.min(100, Math.abs(r.latest.pct_change));
       fill.style.width = w.toFixed(1) + '%';
-      fill.style.background = r.latest.pct_change < -40 ? '#c0392b'
-                             : r.latest.pct_change < -20 ? '#e53e3e'
-                             : r.latest.pct_change < -10 ? '#ed8936' : '#a0aec0';
+      if (r.latest.pct_change < 0) {
+        fill.style.background = r.latest.pct_change < -40 ? '#c0392b' : r.latest.pct_change < -20 ? '#e53e3e' : r.latest.pct_change < -10 ? '#ed8936' : '#a0aec0';
+      } else {
+        fill.style.background = r.latest.pct_change > 40 ? '#276749' : r.latest.pct_change > 20 ? '#38a169' : '#68d391';
+      }
       track.appendChild(fill);
     }
     wrap.appendChild(track);
@@ -758,7 +852,7 @@ function renderFireTable(infraFires) {
   var tbody = document.getElementById('fire-tbody');
   tbody.textContent = '';
 
-  var fires = infraFires.filter(function (f) { return f.distance_km <= 25; }).slice(0, 10);
+  var fires = (infraFires || []).filter(function (f) { return f && f.distance_km != null && f.distance_km <= 25; }).slice(0, 10);
   if (!fires.length) {
     var row = el('tr');
     row.appendChild(el('td', { colspan: '6', class: 'empty-state' }, 'No infrastructure proximity alerts in the last 48h.'));
@@ -774,10 +868,11 @@ function renderFireTable(infraFires) {
     tr.appendChild(el('td', { class: 'mono' }, fmtDate(f.detected_at)));
     tr.appendChild(el('td', { style: 'color:var(--slate-lt);font-size:11px' }, f.satellite || ''));
     tr.appendChild(el('td', { style: 'font-weight:500' }, f.infrastructure || '—'));
-    tr.appendChild(el('td', { class: 'mono', style: 'text-align:right' }, f.distance_km.toFixed(1) + ' km'));
+    tr.appendChild(el('td', { class: 'mono', style: 'text-align:right' }, (f.distance_km != null ? f.distance_km.toFixed(1) : '—') + ' km'));
 
-    var frpTd = el('td', { class: 'mono', style: 'text-align:right' + (f.frp > 100 ? ';color:var(--red);font-weight:600' : '') },
-      f.frp.toFixed(1));
+    var frpVal = f.frp != null ? f.frp : 0;
+    var frpTd = el('td', { class: 'mono', style: 'text-align:right' + (frpVal > 100 ? ';color:var(--red);font-weight:600' : '') },
+      f.frp != null ? frpVal.toFixed(1) + ' MW' : '— MW');
     tr.appendChild(frpTd);
 
     var confMap = { h: 'conf-h', n: 'conf-n', l: 'conf-l' };
@@ -877,7 +972,20 @@ function initCitySelect(cities) {
     sel.appendChild(opt);
   });
   sel.addEventListener('change', function () { renderNightlightChart(this.value); });
-  if (cities.length) { sel.value = cities[0]; renderNightlightChart(cities[0]); }
+  // Default to worst-performing city
+  var worst = cities[0];
+  var worstPct = 0;
+  cities.forEach(function (c) {
+    var s = nlData[c];
+    if (s && s.length) {
+      var latest = s[s.length - 1];
+      if (latest.pct_change != null && latest.pct_change < worstPct) {
+        worstPct = latest.pct_change;
+        worst = c;
+      }
+    }
+  });
+  if (worst) { sel.value = worst; renderNightlightChart(worst); }
 }
 
 // ── internet connectivity table ──────────────────────────────────────────────
@@ -907,9 +1015,9 @@ function renderInternetTable(data) {
     var tr = el('tr');
     tr.appendChild(el('td', { style: 'font-weight:500' }, r.country));
     tr.appendChild(el('td', { class: 'mono', style: 'text-align:right' },
-      r.latest.connectivity != null ? r.latest.connectivity.toFixed(3) : '—'));
+      r.latest.connectivity != null ? r.latest.connectivity.toFixed(3) : '\u2014'));
     tr.appendChild(el('td', { class: 'mono', style: 'text-align:right' },
-      r.latest.min_connectivity != null ? r.latest.min_connectivity.toFixed(3) : '—'));
+      r.latest.min_connectivity != null ? r.latest.min_connectivity.toFixed(3) : '\u2014'));
 
     var pctTd = el('td', { class: 'mono', style: 'text-align:right' });
     pctTd.appendChild(pctSpan(r.latest.pct_change));
@@ -940,11 +1048,13 @@ function renderInternetChart(countryName) {
 
   var traces = [
     { x: dates, y: conn, type: 'scatter', mode: 'lines+markers', name: 'Connectivity',
-      line: { color: '#2b6cb0', width: 2 }, marker: { size: 4 } },
+      line: { color: '#2b6cb0', width: 2 }, marker: { size: 4 },
+      hovertemplate: countryName + '<br>%{x|%Y-%m-%d}<br>Connectivity: %{y:.3f}<extra></extra>' },
   ];
   if (baseline[0] != null) {
     traces.push({ x: dates, y: baseline, type: 'scatter', mode: 'lines', name: 'Baseline',
-      line: { color: '#718096', width: 1, dash: 'dot' } });
+      line: { color: '#718096', width: 1, dash: 'dot' },
+      hovertemplate: countryName + '<br>%{x|%Y-%m-%d}<br>Baseline: %{y:.3f}<extra></extra>' });
   }
 
   Plotly.newPlot('internet-chart', traces, {
@@ -953,7 +1063,7 @@ function renderInternetChart(countryName) {
     paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
     legend: { x: 0, y: 1.1, orientation: 'h', font: { size: 10 } },
     xaxis: { showgrid: false, tickfont: { size: 10 } },
-    yaxis: { title: 'Connectivity (0-1)', range: [0, 1.05], showgrid: true, gridcolor: '#edf2f7', titlefont: { size: 10 } },
+    yaxis: { title: 'Connectivity (0-1)', range: [0, 1.05], showgrid: true, gridcolor: '#edf2f7', titlefont: { size: 10 }, automargin: true },
   }, { responsive: true, displayModeBar: false });
 }
 
@@ -998,7 +1108,7 @@ function renderInfraTable(data) {
 
     tr.appendChild(el('td', { class: 'mono', style: 'text-align:right' }, String(latest.fire_count || 0)));
     tr.appendChild(el('td', { class: 'mono', style: 'text-align:right' },
-      latest.max_frp != null ? latest.max_frp.toFixed(1) : '—'));
+      latest.max_frp != null ? latest.max_frp.toFixed(1) + ' MW' : '—'));
     tbody.appendChild(tr);
 
     // Collect damage events
@@ -1010,7 +1120,7 @@ function renderInfraTable(data) {
         dr.appendChild(el('td', { class: 'mono' }, s.date));
         dr.appendChild(el('td', { class: 'mono', style: 'text-align:right' }, String(s.fire_count || 0)));
         dr.appendChild(el('td', { class: 'mono', style: 'text-align:right;color:var(--red);font-weight:600' },
-          s.max_frp != null ? s.max_frp.toFixed(1) : '—'));
+          s.max_frp != null ? s.max_frp.toFixed(1) + ' MW' : '—'));
         damageTbody.appendChild(dr);
       }
     });
@@ -1025,6 +1135,75 @@ function renderInfraTable(data) {
   }
 }
 
+function renderFlightData(data) {
+  var airports = Object.keys(data).sort();
+  var select = document.getElementById('flight-airport-select');
+  var tbody = document.getElementById('flight-tbody');
+
+  if (!airports.length) {
+    tbody.textContent = '';
+    tbody.appendChild(el('tr')).appendChild(el('td', { colspan: '5', class: 'empty-state' }, 'No flight data available.'));
+    return;
+  }
+
+  // Populate select
+  airports.forEach(function (name) {
+    var opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name + ' (' + data[name][0].icao + ')';
+    select.appendChild(opt);
+  });
+
+  function updateFlightChart() {
+    var selected = select.value;
+    var series = data[selected] || [];
+
+    var dates = series.map(function (s) { return s.date; });
+    var arrivals = series.map(function (s) { return s.arrivals; });
+    var departures = series.map(function (s) { return s.departures; });
+
+    Plotly.newPlot('flight-chart', [
+      { x: dates, y: arrivals, name: 'Arrivals', type: 'bar', marker: { color: '#2b6cb0' } },
+      { x: dates, y: departures, name: 'Departures', type: 'bar', marker: { color: '#48bb78' } },
+    ], {
+      barmode: 'group',
+      margin: { t: 30, r: 20, b: 40, l: 50 },
+      paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
+      font: { family: 'Inter, sans-serif', size: 12, color: '#1a202c' },
+      xaxis: { title: '', gridcolor: '#e2e8f0' },
+      yaxis: { title: 'Movements', gridcolor: '#e2e8f0' },
+      legend: { orientation: 'h', y: 1.12 },
+      shapes: [{ type: 'line', x0: '2026-02-28', x1: '2026-02-28', y0: 0, y1: 1, yref: 'paper', line: { color: '#c0392b', width: 2, dash: 'dash' } }],
+      annotations: [{ x: '2026-02-28', y: 1, yref: 'paper', text: 'War start', showarrow: false, font: { size: 10, color: '#c0392b' }, yanchor: 'bottom' }],
+    }, { responsive: true, displayModeBar: false });
+  }
+
+  // Render table for selected airport
+  function updateFlightTable() {
+    var selected = select.value;
+    var series = data[selected] || [];
+    tbody.textContent = '';
+    series.forEach(function (s) {
+      var tr = el('tr');
+      tr.appendChild(el('td', { style: 'font-weight:500' }, selected));
+      tr.appendChild(el('td', { class: 'mono', style: 'color:var(--slate-lt)' }, s.date));
+      tr.appendChild(el('td', { class: 'mono', style: 'text-align:right' }, String(s.arrivals)));
+      tr.appendChild(el('td', { class: 'mono', style: 'text-align:right' }, String(s.departures)));
+      var totalStyle = 'text-align:right;font-weight:600';
+      if (s.total === 0) totalStyle += ';color:var(--red)';
+      tr.appendChild(el('td', { class: 'mono', style: totalStyle }, String(s.total)));
+      tbody.appendChild(tr);
+    });
+    if (!series.length) {
+      tbody.appendChild(el('tr')).appendChild(el('td', { colspan: '5', class: 'empty-state' }, 'No data for this airport.'));
+    }
+  }
+
+  select.addEventListener('change', function () { updateFlightChart(); updateFlightTable(); });
+  updateFlightChart();
+  updateFlightTable();
+}
+
 // ── main ──────────────────────────────────────────────────────────────────────
 Promise.all([
   load(DATA + '/nightlights.json'),
@@ -1035,10 +1214,11 @@ Promise.all([
   load(DATA + '/meta.json'),
   load(DATA + '/internet.json').catch(function () { return {}; }),
   load(DATA + '/thermal_signatures.json').catch(function () { return {}; }),
+  load(DATA + '/flights.json').catch(function () { return {}; }),
 ]).then(function (results) {
-  var nl = results[0], risk = results[1], sar = results[2],
-      fireGeo = results[3], infraFires = results[4], meta = results[5],
-      inet = results[6], thermalSigs = results[7];
+  var nl = results[0] || {}, risk = results[1] || {}, sar = results[2] || {},
+      fireGeo = results[3] || { features: [] }, infraFires = results[4] || [], meta = results[5] || {},
+      inet = results[6] || {}, thermalSigs = results[7] || {}, flightData = results[8] || {};
 
   // Build per-city data structure for chart
   Object.keys(nl).forEach(function (city) {
@@ -1052,8 +1232,10 @@ Promise.all([
   });
 
   if (meta.generated_at) {
-    setText('topbar-updated', 'Updated ' + meta.generated_at.slice(0, 10));
-    setText('footer-right', meta.generated_at.slice(0, 10) + ' \u2022 Baseline: 15 Jan \u2013 27 Feb 2026');
+    var gd = new Date(meta.generated_at);
+    var fmtd = gd.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+    setText('topbar-updated', 'Updated ' + fmtd);
+    setText('footer-right', fmtd + ' \u2022 Baseline: 15 Jan \u2013 27 Feb 2026');
   }
 
   renderRisk(risk);
@@ -1065,6 +1247,7 @@ Promise.all([
   renderInternetTable(inet);
   initInetSelect(Object.keys(inet).sort());
   renderInfraTable(thermalSigs);
+  renderFlightData(flightData);
 
 }).catch(function (err) {
   console.error(err);
@@ -1104,7 +1287,10 @@ load(DATA + '/nz.json').then(function (nz) {
   setText('nz-stat-sar', String(sarCount));
   setText('nz-stat-mig', String(Object.keys(nz.migration_pressure).length));
 }).catch(function () {
-  // NZ data not available yet — leave loading placeholders
+  var nzGrid = document.getElementById('nz-pressure-grid');
+  nzGrid.textContent = '';
+  var msg = el('p', { class: 'empty-state', style: 'grid-column:1/-1' }, 'NZ data not available. Check that nz.json exists in the data directory.');
+  nzGrid.appendChild(msg);
 });
 
 function renderNZAssetTable(assets, category, assetType, tbodyId) {
@@ -1175,7 +1361,7 @@ function renderNZPressureGrid(migData) {
   var cities = Object.keys(migData);
   if (!cities.length) {
     grid.appendChild(el('p', { class: 'empty-state', style: 'grid-column:1/-1' },
-      'No migration pressure data yet. Run calculate_migration_pressure task to populate.'));
+      'Migration pressure data not yet computed.'));
     return;
   }
 
@@ -1195,12 +1381,13 @@ function renderNZPressureGrid(migData) {
     header.appendChild(el('span', { class: 'badge badge-' + badgeClass }, level));
     card.appendChild(header);
 
-    card.appendChild(el('div', { class: 'risk-score' }, latest.pressure.toFixed(3)));
+    card.appendChild(el('div', { class: 'risk-score' }, latest.pressure != null ? latest.pressure.toFixed(2) : '\u2014'));
 
+    var pVal = latest.pressure || 0;
     var track = el('div', { class: 'progress-track' });
-    var fillColor = latest.pressure >= 0.7 ? '#c0392b' : latest.pressure >= 0.4 ? '#ed8936' : latest.pressure >= 0.2 ? '#3182ce' : '#38a169';
+    var fillColor = pVal >= 0.7 ? '#c0392b' : pVal >= 0.4 ? '#ed8936' : pVal >= 0.2 ? '#3182ce' : '#38a169';
     var fill = el('div', { class: 'progress-fill' });
-    fill.style.width = Math.min(100, latest.pressure * 100).toFixed(1) + '%';
+    fill.style.width = Math.min(100, pVal * 100).toFixed(1) + '%';
     fill.style.background = fillColor;
     track.appendChild(fill);
     card.appendChild(track);
@@ -1210,7 +1397,7 @@ function renderNZPressureGrid(migData) {
       .forEach(function (pair) {
         var item = el('div', { class: 'sub-score-item' });
         item.appendChild(el('div', { class: 'sub-score-label' }, pair[0]));
-        item.appendChild(el('div', { class: 'sub-score-val' }, pair[1].toFixed(2)));
+        item.appendChild(el('div', { class: 'sub-score-val' }, pair[1] != null ? pair[1].toFixed(2) : '\u2014'));
         subs.appendChild(item);
       });
     card.appendChild(subs);
@@ -1237,17 +1424,19 @@ function renderNZNightlightChart(cityName) {
 
   Plotly.newPlot('nz-pressure-chart', [
     { x: dates, y: radiance, type: 'scatter', mode: 'lines+markers', name: 'Radiance',
-      line: { color: '#0d9488', width: 2 }, marker: { size: 4 }, yaxis: 'y1' },
+      line: { color: '#0d9488', width: 2 }, marker: { size: 4 }, yaxis: 'y1',
+      hovertemplate: '%{x}<br>%{y:.4f} nW/cm\u00b2/sr<extra></extra>' },
     { x: dates, y: pct, type: 'bar', name: '% vs baseline',
-      marker: { color: colors, opacity: 0.6 }, yaxis: 'y2' },
+      marker: { color: colors, opacity: 0.6 }, yaxis: 'y2',
+      hovertemplate: '%{x}<br>%{y:.1f}%<extra></extra>' },
   ], {
     margin: { t: 10, r: 60, b: 40, l: 60 },
     font: { family: 'Inter, system-ui, sans-serif', size: 11, color: '#4a5568' },
     paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
     legend: { x: 0, y: 1.1, orientation: 'h', font: { size: 10 } },
     xaxis: { showgrid: false, tickfont: { size: 10 } },
-    yaxis: { title: 'Radiance', showgrid: true, gridcolor: '#edf2f7', titlefont: { size: 10 } },
-    yaxis2: { title: '% Change', overlaying: 'y', side: 'right', showgrid: false, titlefont: { size: 10 } },
+    yaxis: { title: 'Radiance (nW/cm\u00b2/sr)', showgrid: true, gridcolor: '#edf2f7', titlefont: { size: 10 }, automargin: true },
+    yaxis2: { title: '% Change', overlaying: 'y', side: 'right', showgrid: false, titlefont: { size: 10 }, automargin: true },
   }, { responsive: true, displayModeBar: false });
 }
 
@@ -1261,29 +1450,35 @@ function initNZCitySelect(cities) {
   if (cities.length) { sel.value = cities[0]; renderNZNightlightChart(cities[0]); }
 }
 
-}());
-
-// ── tab switching (outside IIFE) ─────────────────────────────────────────────
-function switchTab(tab) {
+// ── tab switching ─────────────────────────────────────────────────────────
+window.switchTab = function switchTab(tab) {
   document.querySelectorAll('.tab-section').forEach(function (s) { s.classList.remove('active'); });
-  document.querySelectorAll('.tab-btn').forEach(function (b) { b.classList.remove('active', 'nz-active'); });
+  document.querySelectorAll('.tab-btn').forEach(function (b) {
+    b.classList.remove('active', 'nz-active');
+    b.setAttribute('aria-selected', 'false');
+  });
 
   var section = document.getElementById('tab-' + tab);
   if (section) section.classList.add('active');
 
   var btns = document.querySelectorAll('.tab-btn');
   btns.forEach(function (b) {
-    if (b.textContent.toLowerCase().indexOf(tab === 'gulf' ? 'gulf' : 'nz') >= 0) {
+    if (b.getAttribute('data-tab') === tab) {
       b.classList.add('active');
+      b.setAttribute('aria-selected', 'true');
       if (tab === 'nz') b.classList.add('nz-active');
     }
   });
 
   // Initialise NZ map on first switch (Leaflet needs visible container)
+  if (tab === 'nz' && window._nzMap) {
+    requestAnimationFrame(function () { window._nzMap.invalidateSize(); });
+  }
   if (tab === 'nz' && !window._nzMapInit) {
     window._nzMapInit = true;
-    setTimeout(function () {
+    requestAnimationFrame(function () {
       var map = L.map('nz-map', { center: [-38.5, 174], zoom: 5 });
+      window._nzMap = map;
       L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
         attribution: '\u00a9 OpenStreetMap \u00a9 CARTO', maxZoom: 18,
       }).addTo(map);
@@ -1330,9 +1525,16 @@ function switchTab(tab) {
         return div;
       };
       legend.addTo(map);
-    }, 100);
+    });
   }
-}
+};
+
+// Bind click handlers from JS instead of inline onclick
+document.querySelectorAll('.tab-btn[data-tab]').forEach(function (btn) {
+  btn.addEventListener('click', function () { window.switchTab(btn.getAttribute('data-tab')); });
+});
+
+}());
 </script>
 </body>
 </html>
