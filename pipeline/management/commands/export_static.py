@@ -23,6 +23,7 @@ from pipeline.models import (
     AreaOfInterest,
     CompoundRiskIndicator,
     FlightActivity,
+    GDELTEventCount,
     InternetOutage,
     MigrationPressureIndicator,
     NightlightObservation,
@@ -79,17 +80,114 @@ class Command(BaseCommand):
 
     def _export_meta(self, out_dir):
         import datetime
-        latest_dnb = NightlightObservation.objects.aggregate(latest=Max("date"))["latest"]
-        latest_fire = ThermalAnomaly.objects.aggregate(latest=Max("detected_at"))["latest"]
+
+        GULF_COUNTRIES = ["Iran", "UAE", "Saudi Arabia", "Qatar", "Bahrain", "Kuwait", "Iraq"]
+        today = date.today()
+
+        # ---- freshness per source ----
+        source_queries = {
+            "nightlights": NightlightObservation.objects.aggregate(latest=Max("date"))["latest"],
+            "fires": (
+                ThermalAnomaly.objects.aggregate(latest=Max("detected_at"))["latest"]
+            ),
+            "internet": InternetOutage.objects.aggregate(latest=Max("date"))["latest"],
+            "flights": FlightActivity.objects.aggregate(latest=Max("date"))["latest"],
+            "sar": SARVesselDetection.objects.aggregate(latest=Max("date"))["latest"],
+            "thermal": ThermalSignature.objects.aggregate(latest=Max("date"))["latest"],
+        }
+
+        freshness = {}
+        stale_sources = []
+        for src, latest in source_queries.items():
+            if latest is None:
+                freshness[src] = {"latest": None, "days_ago": None}
+                stale_sources.append(src)
+                continue
+            # fires returns datetime, others return date
+            latest_date = latest.date() if hasattr(latest, "date") and callable(latest.date) else latest
+            days_ago = (today - latest_date).days
+            freshness[src] = {"latest": str(latest_date), "days_ago": days_ago}
+            if days_ago > 3:
+                stale_sources.append(src)
+
+        stale_warning = (
+            f"Stale data sources (>3 days old): {', '.join(stale_sources)}"
+            if stale_sources else None
+        )
+
+        # ---- situation brief ----
+        brief_parts = []
+
+        # Worst nightlight city (Gulf, latest date, pct_change < -20)
+        latest_nl_date = freshness["nightlights"]["latest"]
+        if latest_nl_date:
+            worst_nl = (
+                NightlightObservation.objects.filter(
+                    date=latest_nl_date,
+                    aoi__country__in=GULF_COUNTRIES,
+                    pct_change__lt=-20,
+                )
+                .select_related("aoi")
+                .order_by("pct_change")
+                .first()
+            )
+            if worst_nl:
+                brief_parts.append(
+                    f"{worst_nl.aoi.name} nightlights {worst_nl.pct_change:+.0f}% vs baseline"
+                )
+
+        # Hormuz vessel traffic
+        latest_sar = (
+            SARVesselDetection.objects.filter(
+                chokepoint__name__icontains="Hormuz",
+                pct_change__lt=-20,
+            )
+            .order_by("-date")
+            .first()
+        )
+        if latest_sar:
+            brief_parts.append(
+                f"Hormuz traffic {latest_sar.pct_change:+.0f}% on {latest_sar.date}"
+            )
+
+        # Damaged facilities
+        damaged = sorted(set(
+            ThermalSignature.objects.filter(damage_detected=True).values_list(
+                "aoi__name", flat=True
+            )
+        ))
+        if damaged:
+            brief_parts.append(f"Damaged facilities: {', '.join(damaged)}")
+
+        # Internet degradation
+        latest_inet_date = freshness["internet"]["latest"]
+        if latest_inet_date:
+            degraded = (
+                InternetOutage.objects.filter(
+                    date=latest_inet_date,
+                    country__in=GULF_COUNTRIES,
+                    pct_change__lt=-10,
+                )
+                .order_by("pct_change")
+            )
+            if degraded.exists():
+                parts = [f"{d.country} {d.pct_change:+.0f}%" for d in degraded[:3]]
+                brief_parts.append(f"Internet degradation: {', '.join(parts)}")
+
+        situation_brief = "; ".join(brief_parts) if brief_parts else "No critical alerts"
+
         self._write(
             os.path.join(out_dir, "meta.json"),
             {
                 "generated_at": datetime.datetime.utcnow().isoformat() + "Z",
-                "latest_nightlight": str(latest_dnb) if latest_dnb else None,
-                "latest_fire": latest_fire.isoformat() if latest_fire else None,
+                "latest_nightlight": freshness["nightlights"]["latest"],
+                "latest_fire": freshness["fires"]["latest"],
                 "war_start": "2026-02-28",
                 "baseline_start": "2026-01-15",
                 "baseline_end": "2026-02-27",
+                "freshness": freshness,
+                "stale_warning": stale_warning,
+                "situation_brief": situation_brief,
             },
         )
 
@@ -158,6 +256,11 @@ class Command(BaseCommand):
                 total_frp.append(round(agg["frp"] or 0, 1))
             result["regions"][region_name] = {"counts": counts, "total_frp": total_frp}
 
+        result["daily_by_country"] = {
+            name: {"dates": all_dates, "counts": result["regions"][name]["counts"]}
+            for name in result["regions"]
+        }
+
         self._write(os.path.join(out_dir, "fires.json"), result)
 
     def _export_fires_geojson(self, out_dir):
@@ -225,8 +328,71 @@ class Command(BaseCommand):
         ]
         self._write(os.path.join(out_dir, "fires_infra.json"), result)
 
+    def _compute_supplementary_scores(self, aoi, for_date):
+        """Compute 5 supplementary scores by joining related tables."""
+        country = aoi.country
+        city_first_word = aoi.name.split()[0]
+
+        # internet_score: from InternetOutage by country+date
+        internet_score = 0.0
+        try:
+            inet = InternetOutage.objects.get(country=country, date=for_date)
+            if inet.pct_change is not None and inet.pct_change < 0:
+                internet_score = min(1.0, max(0.0, abs(inet.pct_change) / 100))
+        except InternetOutage.DoesNotExist:
+            internet_score = None
+
+        # flight_score: from FlightActivity matching city name
+        flight_score = 0.0
+        flight = (
+            FlightActivity.objects.filter(
+                airport_name__icontains=city_first_word,
+                date=for_date,
+            ).first()
+        )
+        if flight is None:
+            flight_score = None
+        elif (
+            flight.baseline_movements
+            and flight.baseline_movements > 0
+            and flight.pct_change is not None
+            and flight.pct_change < 0
+        ):
+            flight_score = min(1.0, max(0.0, abs(flight.pct_change / 100)))
+
+        # gdelt_score: from GDELTEventCount by country+date
+        gdelt_score = 0.0
+        try:
+            gdelt = GDELTEventCount.objects.get(country=country, date=for_date)
+            gdelt_score = min(1.0, gdelt.total_crisis_events / 50)
+        except GDELTEventCount.DoesNotExist:
+            gdelt_score = None
+
+        # thermal_score: from ThermalSignature by country+date
+        thermal_score = 0.0
+        thermals = ThermalSignature.objects.filter(
+            aoi__country=country, date=for_date,
+        )
+        total_count = thermals.count()
+        if total_count > 0:
+            damaged_count = thermals.filter(damage_detected=True).count()
+            thermal_score = damaged_count / total_count
+        else:
+            thermal_score = None
+
+        # no2_score: not yet backfilled
+        no2_score = None
+
+        return {
+            "no2_score": no2_score,
+            "internet_score": round(internet_score, 4) if internet_score is not None else None,
+            "flight_score": round(flight_score, 4) if flight_score is not None else None,
+            "gdelt_score": round(gdelt_score, 4) if gdelt_score is not None else None,
+            "thermal_score": round(thermal_score, 4) if thermal_score is not None else None,
+        }
+
     def _export_compound_risk(self, out_dir):
-        """Latest compound risk indicators."""
+        """Latest compound risk indicators with supplementary scores."""
         from datetime import datetime
         today = date.today()
         indicators = (
@@ -244,20 +410,23 @@ class Command(BaseCommand):
                     .order_by("-compound_risk")
                 )
 
+        indicator_list = []
+        for i in indicators:
+            entry = {
+                "aoi_name": i.aoi.name,
+                "country": i.aoi.country,
+                "compound_risk": round(i.compound_risk, 4),
+                "alert_level": i.alert_level,
+                "nightlight_score": round(i.nightlight_score, 4),
+                "fire_activity_score": round(i.fire_activity_score, 4),
+                "trade_flow_score": round(i.trade_flow_score, 4),
+            }
+            entry.update(self._compute_supplementary_scores(i.aoi, i.date))
+            indicator_list.append(entry)
+
         result = {
             "as_of": str(indicators[0].date) if indicators else None,
-            "indicators": [
-                {
-                    "aoi_name": i.aoi.name,
-                    "country": i.aoi.country,
-                    "compound_risk": round(i.compound_risk, 4),
-                    "alert_level": i.alert_level,
-                    "nightlight_score": round(i.nightlight_score, 4),
-                    "fire_activity_score": round(i.fire_activity_score, 4),
-                    "trade_flow_score": round(i.trade_flow_score, 4),
-                }
-                for i in indicators
-            ],
+            "indicators": indicator_list,
         }
         self._write(os.path.join(out_dir, "compound_risk.json"), result)
 
@@ -276,9 +445,15 @@ class Command(BaseCommand):
             name = d["chokepoint__name"]
             if name not in result:
                 result[name] = []
+            cov = d["scene_coverage"]
+            normalised = (
+                round(d["vessel_count"] / cov, 1)
+                if cov and cov > 0 else None
+            )
             result[name].append({
                 "date": str(d["date"]),
                 "vessel_count": d["vessel_count"],
+                "normalised_count": normalised,
                 "baseline_count": d["baseline_count"],
                 "pct_change": round(d["pct_change"], 1) if d["pct_change"] is not None else None,
                 "scene_coverage": round(d["scene_coverage"], 2),
@@ -323,15 +498,26 @@ class Command(BaseCommand):
         from collections import defaultdict
         facilities = defaultdict(list)
         for s in sigs:
+            status = s["status"]
+            data_caveat = None
+            if (
+                s["facility_profile"] == "flaring"
+                and s["status"] == "offline"
+                and (s["fire_count"] is None or s["fire_count"] == 0)
+            ):
+                status = "no_data"
+                data_caveat = "No FIRMS detections \u2014 status unknown"
+
             facilities[s["aoi__name"]].append({
                 "date": str(s["date"]),
                 "country": s["aoi__country"],
                 "profile": s["facility_profile"],
-                "status": s["status"],
+                "status": status,
                 "damage": s["damage_detected"],
                 "fire_count": s["fire_count"],
                 "max_frp": round(s["max_frp"], 1) if s["max_frp"] is not None else None,
                 "baseline_fires": round(s["baseline_fire_count"], 1) if s["baseline_fire_count"] is not None else None,
+                "data_caveat": data_caveat,
             })
 
         self._write(os.path.join(out_dir, "thermal_signatures.json"), dict(sorted(facilities.items())))
@@ -438,7 +624,7 @@ class Command(BaseCommand):
             FlightActivity.objects.all()
             .order_by("airport_name", "date")
             .values("airport_name", "airport_icao", "date",
-                    "arrivals", "departures", "total_movements")
+                    "arrivals", "departures", "total_movements", "country")
         )
 
         airports = defaultdict(list)
@@ -446,6 +632,7 @@ class Command(BaseCommand):
             airports[f["airport_name"]].append({
                 "date": str(f["date"]),
                 "icao": f["airport_icao"],
+                "country": f["country"],
                 "arrivals": f["arrivals"],
                 "departures": f["departures"],
                 "total": f["total_movements"],
