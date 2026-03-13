@@ -110,10 +110,15 @@ class Command(BaseCommand):
             if days_ago > 3:
                 stale_sources.append(src)
 
-        stale_warning = (
-            f"Stale data sources (>3 days old): {', '.join(stale_sources)}"
-            if stale_sources else None
-        )
+        stale_warning = None
+        if stale_sources:
+            parts = []
+            for s in stale_sources:
+                f = freshness[s]
+                if f["latest"]:
+                    parts.append(f"{s.title()} data is {f['days_ago']} days old (latest: {f['latest']})")
+            if parts:
+                stale_warning = ". ".join(parts) + ". NASA/satellite processing lag."
 
         # ---- situation brief ----
         brief_parts = []
@@ -133,7 +138,9 @@ class Command(BaseCommand):
             )
             if worst_nl:
                 brief_parts.append(
-                    f"{worst_nl.aoi.name} nightlights {worst_nl.pct_change:+.0f}% vs baseline"
+                    f"{worst_nl.aoi.name} nighttime radiance has collapsed "
+                    f"{abs(worst_nl.pct_change):.0f}% from pre-war baseline, "
+                    f"consistent with widespread power grid failure"
                 )
 
         # Hormuz vessel traffic
@@ -146,8 +153,10 @@ class Command(BaseCommand):
             .first()
         )
         if latest_sar:
+            remaining = 100 + latest_sar.pct_change
             brief_parts.append(
-                f"Hormuz traffic {latest_sar.pct_change:+.0f}% on {latest_sar.date}"
+                f"Strait of Hormuz vessel traffic has fallen to "
+                f"{remaining:.0f}% of normal"
             )
 
         # Damaged facilities
@@ -157,7 +166,13 @@ class Command(BaseCommand):
             )
         ))
         if damaged:
-            brief_parts.append(f"Damaged facilities: {', '.join(damaged)}")
+            if len(damaged) == 1:
+                brief_parts.append(f"{damaged[0]} sustained strike damage")
+            else:
+                brief_parts.append(
+                    f"{len(damaged)} facilities sustained strike damage, "
+                    f"including {damaged[0]}"
+                )
 
         # Internet degradation
         latest_inet_date = freshness["internet"]["latest"]
@@ -171,10 +186,13 @@ class Command(BaseCommand):
                 .order_by("pct_change")
             )
             if degraded.exists():
-                parts = [f"{d.country} {d.pct_change:+.0f}%" for d in degraded[:3]]
-                brief_parts.append(f"Internet degradation: {', '.join(parts)}")
+                worst = degraded.first()
+                brief_parts.append(
+                    f"{worst.country} internet connectivity remains degraded "
+                    f"at {worst.pct_change:+.1f}%"
+                )
 
-        situation_brief = "; ".join(brief_parts) if brief_parts else "No critical alerts"
+        situation_brief = ". ".join(brief_parts) + "." if brief_parts else None
 
         self._write(
             os.path.join(out_dir, "meta.json"),
