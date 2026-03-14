@@ -212,6 +212,18 @@
 <main>
 <div class="main tab-section active" id="tab-gulf" role="tabpanel" aria-labelledby="tab-btn-gulf">
 
+  <!-- Situation Brief -->
+  <div id="situation-brief" class="card" style="border-left:4px solid var(--red);background:#fefefe;margin-bottom:0;">
+    <div class="section-header">
+      <span class="section-title">Situation Brief</span>
+      <span class="section-meta" id="brief-date"></span>
+    </div>
+    <p id="brief-text" style="font-size:15px;line-height:1.7;color:var(--text);margin:0;"></p>
+  </div>
+
+  <!-- Data freshness warning -->
+  <div id="stale-banner" style="display:none;background:#fffbeb;border:1px solid #f6e05e;border-radius:var(--radius);padding:10px 16px;font-size:12px;color:var(--amber);"></div>
+
   <!-- Summary row -->
   <div class="summary-row">
     <div class="stat-card">
@@ -238,6 +250,32 @@
       <div class="stat-label">Facilities Damaged</div>
       <div class="stat-value red" id="stat-damaged">—</div>
       <div class="stat-sub">Thermal signature analysis</div>
+    </div>
+  </div>
+
+  <!-- Hero Charts -->
+  <div>
+    <div class="section-header">
+      <span class="section-title">Nighttime Radiance — All Gulf Cities</span>
+      <span class="section-meta" id="nl-hero-freshness">vs. pre-war baseline (15 Jan – 27 Feb 2026)</span>
+    </div>
+    <div id="nightlight-hero-chart" style="height:340px;"></div>
+  </div>
+
+  <div class="two-col">
+    <div class="card">
+      <div class="section-header">
+        <span class="section-title">Fire Activity by Region</span>
+        <span class="section-meta" id="fire-chart-freshness">Daily fire count — VIIRS SNPP &amp; NOAA-20</span>
+      </div>
+      <div id="fire-hero-chart" style="height:280px;"></div>
+    </div>
+    <div class="card">
+      <div class="section-header">
+        <span class="section-title">Hormuz Vessel Traffic</span>
+        <span class="section-meta" id="hormuz-freshness">SAR coverage-normalised vessel count</span>
+      </div>
+      <div id="hormuz-hero-chart" style="height:280px;"></div>
     </div>
   </div>
 
@@ -635,6 +673,212 @@ function todayStr() {
 
 // ── topbar date ───────────────────────────────────────────────────────────────
 setText('topbar-date', todayStr());
+
+// ── event annotations (shared across hero charts) ────────────────────────────
+var EVENT_ANNOTATIONS = [
+  { date: '2026-02-28', label: 'War begins', color: '#c0392b' },
+  { date: '2026-03-06', label: 'Major strikes', color: '#e53e3e' },
+  { date: '2026-03-07', label: 'Grid collapse', color: '#ed8936' },
+];
+
+var NZ_CITIES = ['Auckland', 'Queenstown'];
+var CONTROL_CITIES = ['Mumbai', 'Karachi', 'Singapore'];
+
+function isGulfCity(name) {
+  return NZ_CITIES.indexOf(name) === -1 && CONTROL_CITIES.indexOf(name) === -1;
+}
+
+function makeEventShapes() {
+  return EVENT_ANNOTATIONS.map(function (evt) {
+    return {
+      type: 'line', xref: 'x', x0: evt.date, x1: evt.date,
+      yref: 'paper', y0: 0, y1: 1,
+      line: { color: evt.color, width: 1.5, dash: 'dot' },
+    };
+  });
+}
+
+function makeEventAnnotations() {
+  return EVENT_ANNOTATIONS.map(function (evt) {
+    return {
+      x: evt.date, y: 1, xref: 'x', yref: 'paper',
+      text: evt.label, showarrow: false,
+      font: { size: 9, color: evt.color }, yanchor: 'bottom',
+    };
+  });
+}
+
+var CITY_COLORS = {
+  'Tehran': '#c0392b', 'Dubai': '#2b6cb0', 'Doha': '#38a169',
+  'Kuwait City': '#ed8936', 'Riyadh': '#805ad5', 'Abu Dhabi': '#d69e2e',
+  'Manama': '#319795', 'Isfahan': '#e53e3e', 'Basra': '#718096',
+};
+
+// ── nightlight hero chart (all Gulf cities overlaid) ─────────────────────────
+function renderNightlightHero(nlAllData) {
+  var traces = [];
+  var gulfCities = Object.keys(nlAllData).filter(isGulfCity).sort();
+
+  gulfCities.forEach(function (city) {
+    var series = nlAllData[city];
+    if (!series || !series.length) return;
+    traces.push({
+      x: series.map(function (d) { return d.date; }),
+      y: series.map(function (d) { return d.pct_change; }),
+      type: 'scatter', mode: 'lines+markers',
+      name: city,
+      line: { color: CITY_COLORS[city] || '#718096', width: 2 },
+      marker: { size: 3 },
+      hovertemplate: city + '<br>%{x}<br>%{y:.1f}%<extra></extra>',
+    });
+  });
+
+  // Freshness tag
+  var latestDate = null;
+  gulfCities.forEach(function (city) {
+    var s = nlAllData[city];
+    if (s && s.length) {
+      var d = s[s.length - 1].date;
+      if (!latestDate || d > latestDate) latestDate = d;
+    }
+  });
+  if (latestDate) {
+    var days = Math.round((Date.now() - new Date(latestDate).getTime()) / 86400000);
+    setText('nl-hero-freshness', 'Latest: ' + latestDate + ' (' + days + 'd ago) \u00b7 vs. pre-war baseline');
+  }
+
+  var shapes = makeEventShapes();
+  shapes.push({
+    type: 'line', xref: 'paper', x0: 0, x1: 1,
+    yref: 'y', y0: 0, y1: 0,
+    line: { color: '#a0aec0', width: 1, dash: 'dash' },
+  });
+
+  Plotly.newPlot('nightlight-hero-chart', traces, {
+    margin: { t: 20, r: 20, b: 40, l: 60 },
+    font: { family: 'Inter, system-ui, sans-serif', size: 11, color: '#4a5568' },
+    paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
+    legend: { orientation: 'h', x: 0, y: 1.12, font: { size: 10 } },
+    xaxis: { showgrid: false, tickfont: { size: 10 } },
+    yaxis: {
+      title: '% Change from Baseline', showgrid: true, gridcolor: '#edf2f7',
+      titlefont: { size: 10 }, zeroline: false,
+    },
+    shapes: shapes,
+    annotations: makeEventAnnotations(),
+  }, { responsive: true, displayModeBar: false });
+}
+
+// ── fire hero chart (stacked bar by region) ──────────────────────────────────
+var REGION_COLORS = {
+  'Iran': '#c0392b', 'Saudi Arabia': '#805ad5',
+  'UAE / Qatar / Bahrain': '#2b6cb0', 'Iraq': '#ed8936', 'Kuwait': '#38a169',
+};
+
+function renderFireHero(fireData) {
+  var dbc = fireData.daily_by_country;
+  if (!dbc) return;
+
+  var traces = [];
+  Object.keys(dbc).forEach(function (region) {
+    var rd = dbc[region];
+    traces.push({
+      x: rd.dates, y: rd.counts, type: 'bar', name: region,
+      marker: { color: REGION_COLORS[region] || '#718096' },
+      hovertemplate: region + '<br>%{x}<br>%{y} fires<extra></extra>',
+    });
+  });
+
+  // Freshness
+  var dates = fireData.dates;
+  if (dates && dates.length) {
+    var latest = dates[dates.length - 1];
+    setText('fire-chart-freshness', 'Latest: ' + latest + ' \u00b7 VIIRS SNPP & NOAA-20');
+  }
+
+  Plotly.newPlot('fire-hero-chart', traces, {
+    barmode: 'stack',
+    margin: { t: 10, r: 10, b: 40, l: 50 },
+    font: { family: 'Inter, system-ui, sans-serif', size: 11, color: '#4a5568' },
+    paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
+    legend: { orientation: 'h', x: 0, y: 1.15, font: { size: 9 } },
+    xaxis: { showgrid: false, tickfont: { size: 10 } },
+    yaxis: { title: 'Fire Count', showgrid: true, gridcolor: '#edf2f7', titlefont: { size: 10 } },
+    shapes: makeEventShapes(),
+    annotations: makeEventAnnotations(),
+  }, { responsive: true, displayModeBar: false });
+}
+
+// ── Hormuz vessel hero chart ─────────────────────────────────────────────────
+function renderHormuzHero(sarData) {
+  var hormuz = sarData['Strait of Hormuz'];
+  if (!hormuz || !hormuz.length) {
+    setText('hormuz-hero-chart', 'No Hormuz SAR data available.');
+    return;
+  }
+
+  var dates = hormuz.map(function (d) { return d.date; });
+  var counts = hormuz.map(function (d) { return d.normalised_count; });
+  var baseline = hormuz[0].baseline_count;
+
+  // Freshness
+  var latest = dates[dates.length - 1];
+  var days = Math.round((Date.now() - new Date(latest).getTime()) / 86400000);
+  setText('hormuz-freshness', 'Latest: ' + latest + ' (' + days + 'd ago) \u00b7 SAR normalised');
+
+  var shapes = [{
+    type: 'line', xref: 'paper', x0: 0, x1: 1,
+    yref: 'y', y0: baseline, y1: baseline,
+    line: { color: '#718096', width: 1, dash: 'dot' },
+  }];
+
+  var annotations = [{
+    x: 0, xref: 'paper', y: baseline, yref: 'y',
+    text: 'Pre-war baseline (' + baseline + ')', showarrow: false,
+    font: { size: 9, color: '#718096' }, xanchor: 'left',
+  }];
+
+  // Find peak and trough
+  var maxVal = -Infinity, maxIdx = 0, minVal = Infinity, minIdx = 0;
+  counts.forEach(function (v, i) {
+    if (v != null && v > maxVal) { maxVal = v; maxIdx = i; }
+    if (v != null && v < minVal) { minVal = v; minIdx = i; }
+  });
+
+  if (maxVal > baseline * 1.5) {
+    var pct = ((maxVal - baseline) / baseline * 100).toFixed(0);
+    annotations.push({
+      x: dates[maxIdx], y: maxVal, text: '+' + pct + '%',
+      showarrow: true, arrowhead: 0, ax: 0, ay: -25,
+      font: { size: 10, color: '#c0392b' },
+    });
+  }
+  if (minVal < baseline * 0.7) {
+    var pctMin = ((minVal - baseline) / baseline * 100).toFixed(0);
+    annotations.push({
+      x: dates[minIdx], y: minVal, text: pctMin + '%',
+      showarrow: true, arrowhead: 0, ax: 0, ay: 25,
+      font: { size: 10, color: '#c0392b' },
+    });
+  }
+
+  Plotly.newPlot('hormuz-hero-chart', [{
+    x: dates, y: counts, type: 'scatter', mode: 'lines+markers',
+    name: 'Normalised vessel count',
+    line: { color: '#2b6cb0', width: 2.5 },
+    marker: { size: 6, color: '#2b6cb0' },
+    hovertemplate: '%{x}<br>%{y:.0f} vessels<extra></extra>',
+  }], {
+    margin: { t: 10, r: 20, b: 40, l: 50 },
+    font: { family: 'Inter, system-ui, sans-serif', size: 11, color: '#4a5568' },
+    paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
+    showlegend: false,
+    xaxis: { showgrid: false, tickfont: { size: 10 } },
+    yaxis: { title: 'Vessels', showgrid: true, gridcolor: '#edf2f7', titlefont: { size: 10 } },
+    shapes: shapes,
+    annotations: annotations,
+  }, { responsive: true, displayModeBar: false });
+}
 
 // ── nightlight chart ──────────────────────────────────────────────────────────
 function renderNightlightChart(cityName) {
@@ -1215,10 +1459,12 @@ Promise.all([
   load(DATA + '/internet.json').catch(function () { return {}; }),
   load(DATA + '/thermal_signatures.json').catch(function () { return {}; }),
   load(DATA + '/flights.json').catch(function () { return {}; }),
+  load(DATA + '/fires.json').catch(function () { return {}; }),
 ]).then(function (results) {
   var nl = results[0] || {}, risk = results[1] || {}, sar = results[2] || {},
       fireGeo = results[3] || { features: [] }, infraFires = results[4] || [], meta = results[5] || {},
-      inet = results[6] || {}, thermalSigs = results[7] || {}, flightData = results[8] || {};
+      inet = results[6] || {}, thermalSigs = results[7] || {}, flightData = results[8] || {},
+      fireTimeSeries = results[9] || {};
 
   // Build per-city data structure for chart
   Object.keys(nl).forEach(function (city) {
@@ -1237,13 +1483,25 @@ Promise.all([
     setText('topbar-updated', 'Updated ' + fmtd);
     setText('footer-right', fmtd + ' \u2022 Baseline: 15 Jan \u2013 27 Feb 2026');
   }
+  if (meta.situation_brief) {
+    setText('brief-text', meta.situation_brief);
+    setText('brief-date', meta.generated_at ? fmtDate(meta.generated_at) : '');
+  }
+  if (meta.stale_warning) {
+    var staleBanner = document.getElementById('stale-banner');
+    staleBanner.textContent = meta.stale_warning;
+    staleBanner.style.display = 'block';
+  }
 
   renderRisk(risk);
   renderNLTable(nl);
   initCitySelect(Object.keys(nl).sort());
+  renderNightlightHero(nlData);
   renderVesselTable(sar);
   renderMap(fireGeo);
   renderFireTable(infraFires);
+  renderFireHero(fireTimeSeries);
+  renderHormuzHero(sar);
   renderInternetTable(inet);
   initInetSelect(Object.keys(inet).sort());
   renderInfraTable(thermalSigs);
