@@ -246,6 +246,72 @@
     .two-col { grid-template-columns: 1fr; }
     .nz-summary { grid-template-columns: 1fr 1fr; }
   }
+
+  /* ── Mobile: fuel security tab ── */
+  @media (max-width: 600px) {
+    /* Topbar: stack title */
+    .topbar { height: auto; padding: 8px 12px; flex-wrap: wrap; gap: 4px; }
+    .topbar-left { gap: 8px; }
+    .topbar-title { font-size: 13px; }
+    .topbar-sub { display: none; }
+    .topbar-right { font-size: 10px; gap: 8px; flex-wrap: wrap; }
+
+    /* Tab bar: scroll horizontally */
+    .tab-bar { padding: 0 8px; overflow-x: auto; -webkit-overflow-scrolling: touch; flex-wrap: nowrap; }
+    .tab-btn { padding: 8px 12px; font-size: 11px; white-space: nowrap; flex-shrink: 0; }
+
+    /* Main padding */
+    .main { padding: 12px 10px; gap: 14px; }
+
+    /* Section headers: stack */
+    .section-header { flex-direction: column; gap: 2px; }
+    .section-meta { font-size: 10px; }
+
+    /* Gauge section: stack vertically */
+    .fuel-gauge-wrap { flex-direction: column; gap: 12px; align-items: flex-start; }
+    .fuel-gauge { width: 110px; height: 110px; }
+    .fuel-gauge svg { width: 110px; height: 110px; }
+    .fuel-gauge-value { font-size: 22px; }
+    .fuel-countdown-days { font-size: 28px; }
+    .fuel-countdown-label { font-size: 11px; }
+
+    /* Stock cards: single column */
+    .fuel-cards { grid-template-columns: 1fr; }
+    .fuel-card { padding: 10px 12px; }
+    .fuel-bar-labels { font-size: 11px; }
+
+    /* Component bars: tighter */
+    .comp-bar-row { grid-template-columns: 90px 1fr 36px; gap: 6px; font-size: 11px; }
+
+    /* Charts: reduce height */
+    #fuel-price-chart { height: 260px !important; }
+    #fuel-hormuz-chart { height: 220px !important; }
+
+    /* Cascade table: horizontal scroll */
+    .cascade-table { font-size: 11px; min-width: 580px; }
+    .cascade-table th, .cascade-table td { padding: 5px 6px; }
+
+    /* Effect cards: single column */
+    .effect-cards { grid-template-columns: 1fr; }
+
+    /* Methodology */
+    .fuel-methodology { font-size: 10px; padding: 10px 12px; }
+
+    /* Tooltips: narrower */
+    .tip::after { width: 200px; font-size: 10px; }
+
+    /* Summary rows */
+    .summary-row { grid-template-columns: 1fr; }
+    .nz-summary { grid-template-columns: 1fr; }
+    .fuel-summary { grid-template-columns: 1fr; }
+
+    /* Card padding */
+    .card { padding: 12px; }
+    .stat-card { padding: 10px 12px; }
+
+    /* Footer */
+    .footer { flex-direction: column; padding: 10px 12px; gap: 4px; font-size: 10px; }
+  }
 </style>
 </head>
 <body>
