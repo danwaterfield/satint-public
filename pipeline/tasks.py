@@ -2257,3 +2257,365 @@ def calculate_enhanced_migration_pressure(self):
 
     logger.info("Enhanced migration pressure: %d NZ locations", updated)
     return {"date": today.isoformat(), "updated": updated}
+
+
+# ---------------------------------------------------------------------------
+# NZ Fuel Security Indicator
+# ---------------------------------------------------------------------------
+
+# MSO minimums (since Jan 2025)
+_MSO_MINIMUMS = {"petrol": 28.0, "diesel": 21.0, "jet": 24.0}
+
+# Industry cascade parameters: (fuel_type, impact_threshold_above_mso, elasticity, priority, label, effect)
+_INDUSTRY_CASCADE = [
+    ("jet", 5, "low", "medium", "Aviation", "Route cuts, frequency reduction"),
+    ("diesel", 3, "very_low", "low", "Fishing", "Fleet grounding, seafood price spike"),
+    ("diesel", 7, "low", "high", "Freight", "Delivery delays, essential goods priority"),
+    ("diesel", 5, "very_low", "medium", "Agriculture", "Harvest delays, machinery idle"),
+    ("diesel", 10, "medium", "low", "Construction", "Project delays, bitumen shortage"),
+    ("petrol", 3, "high", "low", "Commuter", "Price rationing, demand destruction"),
+]
+
+# Second/third order effects: (trigger_industry, lag_weeks, label, explanation)
+_SECOND_ORDER_EFFECTS = [
+    ("Freight", 14, 2, "Food price inflation", "Freight disruption cascades to retail food prices"),
+    ("Aviation", 21, 3, "Tourism contraction", "Reduced aviation capacity impacts tourism arrivals"),
+    ("Agriculture", 14, 4, "Agricultural disruption", "Diesel shortage + fertiliser dependency via Hormuz"),
+    ("Construction", 21, 4, "Construction halt", "Diesel shortage stalls projects, bitumen from oil refineries"),
+    (None, 0, 2, "Emergency services strain", "Any fuel hitting MSO triggers emergency protocols"),
+    (None, 0, 8, "GDP contraction", "3+ industries impacted signals broader economic contraction"),
+]
+
+
+@shared_task(bind=True, max_retries=2)
+def calculate_fuel_security_indicator(self):
+    """
+    Calculate NZ fuel security compound indicator.
+    Combines Hormuz disruption, price trends, stock levels,
+    supply chain, demand signals, and GDELT narrative.
+    """
+    from pipeline.models import (
+        FuelPriceObservation,
+        FuelStockLevel,
+        NZFuelSecurityIndicator,
+    )
+
+    logger.info("Calculating NZ fuel security indicator")
+    today = date.today()
+
+    # --- 1. Hormuz disruption score (30%) ---
+    hormuz_sar = list(
+        SARVesselDetection.objects.filter(
+            chokepoint__name__icontains="Hormuz",
+            date__gte=today - timedelta(days=14),
+        )
+        .exclude(pct_change=None)
+        .order_by("-date")
+        .values_list("pct_change", flat=True)[:3]
+    )
+    avg_hormuz_pct = sum(hormuz_sar) / len(hormuz_sar) if hormuz_sar else 0
+    # Negative pct_change = disruption
+    hormuz_score = _sigmoid_score(-avg_hormuz_pct, 30, steepness=0.08)
+
+    # --- 2. Price acceleration score (20%) ---
+    latest_prices = FuelPriceObservation.objects.filter(
+        date__gte=today - timedelta(days=14),
+    ).exclude(pct_change=None).values_list("pct_change", flat=True)
+    price_changes = list(latest_prices)
+    avg_price_pct = sum(price_changes) / len(price_changes) if price_changes else 0
+    price_score = _sigmoid_score(avg_price_pct, 10, steepness=0.15)
+
+    # --- 3. Stock depletion score (25%) ---
+    # Get latest stock levels
+    from django.db.models import Max
+    latest_stock_date = FuelStockLevel.objects.aggregate(d=Max("date"))["d"]
+    stock_score = 0.0
+    depletion_projections = {}
+    min_days_to_mso = None
+
+    if latest_stock_date:
+        for fuel_type in ("petrol", "diesel", "jet"):
+            onshore = FuelStockLevel.objects.filter(
+                date=latest_stock_date, fuel_type=fuel_type, stock_type="onshore",
+            ).first()
+            on_water = FuelStockLevel.objects.filter(
+                date=latest_stock_date, fuel_type=fuel_type, stock_type="on_water",
+            ).first()
+
+            if not onshore:
+                continue
+
+            mso = _MSO_MINIMUMS.get(fuel_type, 21)
+            days_above_mso = onshore.days_of_supply - mso
+            total_days = onshore.days_of_supply + (on_water.days_of_supply if on_water else 0)
+
+            # Depletion model
+            hormuz_disruption_frac = max(0, -avg_hormuz_pct / 100) if hormuz_sar else 0
+            nz_hormuz_dependency = 0.40
+            resupply_reduction = hormuz_disruption_frac * nz_hormuz_dependency
+
+            # Days elapsed since stock measurement
+            days_elapsed = (today - latest_stock_date).days
+
+            # Project current onshore stock
+            if resupply_reduction > 0:
+                net_daily_depletion = resupply_reduction  # fraction of daily consumption lost
+                projected_onshore = onshore.days_of_supply - (days_elapsed * net_daily_depletion)
+                projected_onshore = max(0, projected_onshore)
+                projected_days_above_mso = projected_onshore - mso
+
+                if net_daily_depletion > 0:
+                    days_to_mso = max(0, projected_days_above_mso / net_daily_depletion)
+                else:
+                    days_to_mso = None
+            else:
+                projected_onshore = onshore.days_of_supply
+                projected_days_above_mso = days_above_mso
+                days_to_mso = None
+
+            # On-water adjustment: if rerouting via Cape adds ~14 days
+            cape_delay = 14 if hormuz_disruption_frac > 0.3 else 0
+            effective_on_water = max(0, (on_water.days_of_supply if on_water else 0) - cape_delay)
+
+            # Store the actual daily depletion rate for cascade calculations
+            daily_depletion_rate = resupply_reduction if resupply_reduction > 0 else 0
+
+            depletion_projections[fuel_type] = {
+                "onshore_days": round(onshore.days_of_supply, 1),
+                "on_water_days": round(on_water.days_of_supply, 1) if on_water else None,
+                "projected_onshore": round(projected_onshore, 1),
+                "mso_minimum": mso,
+                "days_above_mso": round(projected_days_above_mso, 1),
+                "days_to_mso": round(days_to_mso, 1) if days_to_mso is not None else None,
+                "effective_on_water": round(effective_on_water, 1),
+                "cape_delay_days": cape_delay,
+                "total_effective": round(projected_onshore + effective_on_water, 1),
+                "daily_depletion_rate": round(daily_depletion_rate, 4),
+                "stock_measurement_date": latest_stock_date.isoformat(),
+                "days_since_measurement": days_elapsed,
+                "hormuz_disruption_fraction": round(hormuz_disruption_frac, 4),
+                "nz_hormuz_dependency": nz_hormuz_dependency,
+            }
+
+            if days_to_mso is not None and (min_days_to_mso is None or days_to_mso < min_days_to_mso):
+                min_days_to_mso = days_to_mso
+
+        # Stock score: based on worst fuel type's margin above MSO
+        worst_margin = min(
+            (p["days_above_mso"] for p in depletion_projections.values()),
+            default=30,
+        )
+        # 0 days above MSO = score 1.0, 30 days = score ~0
+        stock_score = _sigmoid_score(-worst_margin, -10, steepness=0.15)
+
+    # --- 4. Supply chain score (10%) — uses Hormuz as proxy ---
+    supply_chain_score = hormuz_score * 0.8  # correlated but dampened
+
+    # --- 5. Demand signal (10%) — NZ flights as proxy ---
+    nz_flights = list(
+        FlightActivity.objects.filter(
+            country="New Zealand",
+            date__gte=today - timedelta(days=7),
+        ).exclude(pct_change=None).values_list("pct_change", flat=True)
+    )
+    avg_nz_flight_pct = sum(nz_flights) / len(nz_flights) if nz_flights else 0
+    # Flight reduction = demand destruction / self-rationing
+    demand_score = _sigmoid_score(-avg_nz_flight_pct, 15, steepness=0.1)
+
+    # --- 6. GDELT narrative (5%) ---
+    nz_gdelt = (
+        GDELTEventCount.objects.filter(
+            country="New Zealand",
+            date__gte=today - timedelta(days=7),
+        ).order_by("-date").first()
+    )
+    fuel_shortage_events = nz_gdelt.fuel_shortage if nz_gdelt else 0
+    gdelt_score = _sigmoid_score(fuel_shortage_events, 5, steepness=0.5)
+
+    # --- Composite score ---
+    fuel_security_risk = round(
+        hormuz_score * 0.30
+        + stock_score * 0.25
+        + price_score * 0.20
+        + supply_chain_score * 0.10
+        + demand_score * 0.10
+        + gdelt_score * 0.05,
+        4,
+    )
+
+    if fuel_security_risk >= 0.8:
+        security_level = "rationing"
+    elif fuel_security_risk >= 0.6:
+        security_level = "critical"
+    elif fuel_security_risk >= 0.4:
+        security_level = "warning"
+    elif fuel_security_risk >= 0.2:
+        security_level = "watch"
+    else:
+        security_level = "normal"
+
+    # Estimated rationing date
+    estimated_rationing_date = None
+    if min_days_to_mso is not None and min_days_to_mso < 365:
+        estimated_rationing_date = today + timedelta(days=int(min_days_to_mso))
+
+    # Industry cascade projections
+    industry_cascade = []
+    for fuel_type, threshold_above_mso, elasticity, priority, label, effect in _INDUSTRY_CASCADE:
+        proj = depletion_projections.get(fuel_type, {})
+        mso = _MSO_MINIMUMS.get(fuel_type, 21)
+        target_stock = mso + threshold_above_mso
+        current_projected = proj.get("projected_onshore", 0)
+        rate = proj.get("daily_depletion_rate", 0)
+
+        if rate > 0 and current_projected > target_stock:
+            days_above = current_projected - target_stock
+            days_to_impact = days_above / rate
+        elif rate > 0:
+            days_to_impact = 0  # already below threshold
+        else:
+            days_to_impact = None
+
+        industry_cascade.append({
+            "industry": label,
+            "fuel_type": fuel_type,
+            "impact_threshold": threshold_above_mso,
+            "elasticity": elasticity,
+            "priority": priority,
+            "effect": effect,
+            "days_to_impact": round(days_to_impact, 1) if days_to_impact is not None else None,
+            "impact_date": (today + timedelta(days=int(days_to_impact))).isoformat() if days_to_impact is not None else None,
+        })
+
+    # Sort by days_to_impact (soonest first, None last)
+    industry_cascade.sort(key=lambda x: x["days_to_impact"] if x["days_to_impact"] is not None else 9999)
+
+    # Add cascade to depletion projections
+    depletion_projections["industry_cascade"] = industry_cascade
+
+    # Second-order effects
+    second_order = []
+    triggered_industries = [ic for ic in industry_cascade if ic["days_to_impact"] is not None and ic["days_to_impact"] < 60]
+    for trigger_industry, trigger_days, lag_weeks, label, explanation in _SECOND_ORDER_EFFECTS:
+        if trigger_industry is None:
+            # Special triggers
+            if label == "Emergency services strain":
+                triggered = min_days_to_mso is not None and min_days_to_mso < 30
+            elif label == "GDP contraction":
+                triggered = len(triggered_industries) >= 3
+            else:
+                triggered = False
+            source_days = min_days_to_mso if min_days_to_mso else None
+        else:
+            matching = [ic for ic in industry_cascade if ic["industry"] == trigger_industry]
+            if matching and matching[0]["days_to_impact"] is not None and matching[0]["days_to_impact"] < trigger_days:
+                triggered = True
+                source_days = matching[0]["days_to_impact"]
+            else:
+                triggered = False
+                source_days = matching[0]["days_to_impact"] if matching else None
+
+        onset_days = (source_days + lag_weeks * 7) if source_days is not None else None
+
+        second_order.append({
+            "effect": label,
+            "triggered": triggered,
+            "trigger_industry": trigger_industry,
+            "lag_weeks": lag_weeks,
+            "explanation": explanation,
+            "onset_days": round(onset_days, 0) if onset_days is not None else None,
+            "onset_date": (today + timedelta(days=int(onset_days))).isoformat() if onset_days is not None else None,
+            "severity": "high" if triggered else ("medium" if source_days is not None and source_days < 60 else "low"),
+        })
+
+    depletion_projections["second_order_effects"] = second_order
+
+    NZFuelSecurityIndicator.objects.update_or_create(
+        date=today,
+        defaults={
+            "hormuz_disruption": hormuz_score,
+            "price_acceleration": price_score,
+            "stock_depletion": stock_score,
+            "supply_chain": supply_chain_score,
+            "demand_signal": demand_score,
+            "gdelt_narrative": gdelt_score,
+            "fuel_security_risk": fuel_security_risk,
+            "security_level": security_level,
+            "estimated_days_to_mso": min_days_to_mso,
+            "estimated_rationing_date": estimated_rationing_date,
+            "depletion_projections": depletion_projections,
+        },
+    )
+
+    logger.info(
+        "NZ fuel security: risk=%.3f (%s), days_to_mso=%s",
+        fuel_security_risk, security_level,
+        f"{min_days_to_mso:.0f}" if min_days_to_mso else "n/a",
+    )
+    return {
+        "date": today.isoformat(),
+        "risk": fuel_security_risk,
+        "level": security_level,
+        "days_to_mso": min_days_to_mso,
+    }
+
+
+@shared_task(bind=True, max_retries=2)
+def fetch_mbie_fuel_prices(self):
+    """
+    Attempt to fetch and ingest MBIE weekly fuel prices automatically.
+    Falls back gracefully if MBIE blocks automated downloads.
+    """
+    from pipeline.clients.mbie_fuel import fetch_mbie_csv, parse_fuel_csv
+    from pipeline.models import FuelPriceObservation
+    from django.db.models import Avg
+
+    logger.info("Attempting MBIE fuel price fetch")
+
+    csv_text = fetch_mbie_csv()
+    if csv_text is None:
+        logger.warning("MBIE CSV download failed — manual CSV ingest required")
+        return {"status": "download_failed"}
+
+    records = parse_fuel_csv(csv_text)
+    if not records:
+        logger.warning("No records parsed from MBIE CSV")
+        return {"status": "no_records"}
+
+    war_start = date(2026, 2, 28)
+    baselines = {}
+    for fuel_type in ("91", "95", "diesel"):
+        bl = FuelPriceObservation.objects.filter(
+            fuel_type=fuel_type, date__lt=war_start,
+        ).aggregate(avg=Avg("retail_price_nzd"))["avg"]
+        if bl:
+            baselines[fuel_type] = bl
+        else:
+            pre_war = [r["retail_price_nzd"] for r in records
+                       if r["fuel_type"] == fuel_type and r["date"] < war_start]
+            if pre_war:
+                baselines[fuel_type] = sum(pre_war) / len(pre_war)
+
+    saved = 0
+    for r in records:
+        baseline = baselines.get(r["fuel_type"])
+        pct_change = None
+        if baseline and baseline > 0:
+            pct_change = round((r["retail_price_nzd"] - baseline) / baseline * 100, 2)
+
+        _, created = FuelPriceObservation.objects.update_or_create(
+            date=r["date"],
+            fuel_type=r["fuel_type"],
+            defaults={
+                "retail_price_nzd": r["retail_price_nzd"],
+                "import_cost_nzd": r["import_cost_nzd"],
+                "margin_nzd": r["margin_nzd"],
+                "baseline_price": baseline,
+                "pct_change": pct_change,
+            },
+        )
+        if created:
+            saved += 1
+
+    logger.info("MBIE fuel prices: %d new, %d total records", saved, len(records))
+    return {"status": "ok", "new_records": saved, "total_parsed": len(records)}

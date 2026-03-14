@@ -23,10 +23,13 @@ from pipeline.models import (
     AreaOfInterest,
     CompoundRiskIndicator,
     FlightActivity,
+    FuelPriceObservation,
+    FuelStockLevel,
     GDELTEventCount,
     InternetOutage,
     MigrationPressureIndicator,
     NightlightObservation,
+    NZFuelSecurityIndicator,
     OpticalAssetCount,
     SARVesselDetection,
     ThermalAnomaly,
@@ -68,6 +71,7 @@ class Command(BaseCommand):
         self._export_thermal_signatures(out_dir)
         self._export_nz(out_dir)
         self._export_flights(out_dir)
+        self._export_fuel_security(out_dir)
 
         self.stdout.write(self.style.SUCCESS(f"Export complete → {out_dir}/"))
 
@@ -657,3 +661,134 @@ class Command(BaseCommand):
             })
 
         self._write(os.path.join(out_dir, "flights.json"), dict(sorted(airports.items())))
+
+    def _export_fuel_security(self, out_dir):
+        """NZ fuel security indicator, stock levels, and price trends."""
+        from collections import defaultdict
+
+        # Latest fuel security indicator
+        latest_indicator = NZFuelSecurityIndicator.objects.order_by("-date").first()
+
+        indicator_data = None
+        if latest_indicator:
+            indicator_data = {
+                "date": str(latest_indicator.date),
+                "fuel_security_risk": round(latest_indicator.fuel_security_risk, 4),
+                "security_level": latest_indicator.security_level,
+                "estimated_days_to_mso": (
+                    round(latest_indicator.estimated_days_to_mso, 1)
+                    if latest_indicator.estimated_days_to_mso is not None else None
+                ),
+                "estimated_rationing_date": (
+                    str(latest_indicator.estimated_rationing_date)
+                    if latest_indicator.estimated_rationing_date else None
+                ),
+                "components": {
+                    "hormuz_disruption": round(latest_indicator.hormuz_disruption, 4),
+                    "price_acceleration": round(latest_indicator.price_acceleration, 4),
+                    "stock_depletion": round(latest_indicator.stock_depletion, 4),
+                    "supply_chain": round(latest_indicator.supply_chain, 4),
+                    "demand_signal": round(latest_indicator.demand_signal, 4),
+                    "gdelt_narrative": round(latest_indicator.gdelt_narrative, 4),
+                },
+                "depletion_projections": latest_indicator.depletion_projections,
+            }
+
+        # Indicator time series (last 30 days)
+        indicator_series = list(
+            NZFuelSecurityIndicator.objects.order_by("date")
+            .values("date", "fuel_security_risk", "security_level",
+                    "hormuz_disruption", "stock_depletion", "price_acceleration",
+                    "estimated_days_to_mso")
+        )
+        series_data = [
+            {
+                "date": str(i["date"]),
+                "risk": round(i["fuel_security_risk"], 4),
+                "level": i["security_level"],
+                "hormuz": round(i["hormuz_disruption"], 4),
+                "stock": round(i["stock_depletion"], 4),
+                "price": round(i["price_acceleration"], 4),
+                "days_to_mso": round(i["estimated_days_to_mso"], 1) if i["estimated_days_to_mso"] else None,
+            }
+            for i in indicator_series
+        ]
+
+        # Stock levels
+        stocks = FuelStockLevel.objects.order_by("date", "fuel_type", "stock_type").values(
+            "date", "fuel_type", "stock_type", "days_of_supply", "mso_minimum_days",
+        )
+        stock_data = defaultdict(list)
+        for s in stocks:
+            key = f"{s['fuel_type']}_{s['stock_type']}"
+            stock_data[key].append({
+                "date": str(s["date"]),
+                "days": round(s["days_of_supply"], 1),
+                "mso_min": s["mso_minimum_days"],
+            })
+
+        # Fuel prices
+        prices = FuelPriceObservation.objects.order_by("date", "fuel_type").values(
+            "date", "fuel_type", "retail_price_nzd", "import_cost_nzd",
+            "margin_nzd", "pct_change",
+        )
+        price_data = defaultdict(list)
+        for p in prices:
+            price_data[p["fuel_type"]].append({
+                "date": str(p["date"]),
+                "retail": round(p["retail_price_nzd"], 3),
+                "import_cost": round(p["import_cost_nzd"], 3) if p["import_cost_nzd"] else None,
+                "margin": round(p["margin_nzd"], 3) if p["margin_nzd"] else None,
+                "pct_change": round(p["pct_change"], 1) if p["pct_change"] is not None else None,
+            })
+
+        # Get latest stock date for staleness calculation
+        latest_stock_date = FuelStockLevel.objects.aggregate(d=Max("date"))["d"]
+
+        # Model assumptions and confidence metadata
+        methodology = {
+            "model_version": "1.0",
+            "composite_method": "Weighted sigmoid scoring (6 components)",
+            "weights": {
+                "hormuz_disruption": 0.30,
+                "stock_depletion": 0.25,
+                "price_acceleration": 0.20,
+                "supply_chain": 0.10,
+                "demand_signal": 0.10,
+                "gdelt_narrative": 0.05,
+            },
+            "assumptions": [
+                "NZ imports ~40% of refined fuel from refineries dependent on Hormuz crude",
+                "Stock data is from MBIE quarterly reports — may be up to 90 days stale",
+                "Depletion model assumes linear consumption and constant disruption fraction",
+                "Cape of Good Hope rerouting adds ~14 days to tanker transit when Hormuz disruption >30%",
+                "MSO minimums: petrol 28d, diesel 21d, jet fuel 24d (per Jan 2025 regulations)",
+                "Industry cascade thresholds are domain estimates, not empirically calibrated",
+                "Price data from MBIE weekly monitoring — 1 week lag",
+            ],
+            "data_sources": {
+                "fuel_prices": "MBIE Weekly Fuel Price Monitoring (weekly CSV)",
+                "fuel_stocks": "MBIE Quarterly Oil Statistics (manual entry)",
+                "hormuz_traffic": "Sentinel-1 SAR vessel detection (2x/week)",
+                "nz_flights": "OpenSky ADS-B flight activity (daily)",
+                "gdelt_events": "GDELT Project crisis event monitoring (6-hourly)",
+            },
+            "confidence_notes": {
+                "stock_staleness": (
+                    f"{(date.today() - latest_stock_date).days} days since last stock measurement"
+                    if latest_stock_date else "No stock data available"
+                ),
+                "price_coverage": f"{sum(len(v) for v in price_data.values())} price observations across {len(price_data)} fuel types",
+                "sar_observations": f"{len(list(indicator_series))} security indicator calculations",
+            },
+        }
+
+        result = {
+            "indicator": indicator_data,
+            "series": series_data,
+            "stocks": dict(stock_data),
+            "prices": dict(price_data),
+            "methodology": methodology,
+        }
+
+        self._write(os.path.join(out_dir, "fuel_security.json"), result)

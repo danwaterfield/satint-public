@@ -173,6 +173,66 @@
   .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0; }
 
   .nz-summary { grid-template-columns: repeat(4, 1fr); }
+  .fuel-summary { grid-template-columns: repeat(4, 1fr); }
+  .tab-btn.fuel-active { border-bottom-color: #e53e3e; }
+
+  .fuel-gauge-wrap { display: flex; align-items: center; gap: 24px; margin-bottom: 16px; }
+  .fuel-gauge { position: relative; width: 140px; height: 140px; }
+  .fuel-gauge svg { transform: rotate(-90deg); }
+  .fuel-gauge-label { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; }
+  .fuel-gauge-value { font-family: var(--font-mono); font-size: 28px; font-weight: 600; }
+  .fuel-gauge-sub { font-size: 11px; color: var(--slate-lt); }
+  .fuel-countdown { flex: 1; }
+  .fuel-countdown-days { font-family: var(--font-mono); font-size: 36px; font-weight: 600; color: var(--red); }
+  .fuel-countdown-label { font-size: 12px; color: var(--slate-lt); }
+
+  .fuel-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .fuel-card { border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; background: var(--white); }
+  .fuel-card-type { font-weight: 600; font-size: 13px; margin-bottom: 8px; }
+  .fuel-bar-track { background: #edf2f7; border-radius: 3px; height: 20px; position: relative; overflow: hidden; margin-bottom: 4px; }
+  .fuel-bar-fill { height: 100%; border-radius: 3px; transition: width 0.3s; }
+  .fuel-bar-mso { position: absolute; top: 0; height: 100%; width: 2px; background: var(--red); z-index: 2; }
+  .fuel-bar-mso-label { position: absolute; top: -14px; font-size: 9px; color: var(--red); transform: translateX(-50%); white-space: nowrap; }
+  .fuel-bar-labels { display: flex; justify-content: space-between; font-size: 10px; color: var(--slate-lt); }
+
+  .component-bars { display: grid; gap: 8px; }
+  .comp-bar-row { display: grid; grid-template-columns: 120px 1fr 40px; gap: 8px; align-items: center; font-size: 12px; }
+  .comp-bar-track { background: #edf2f7; border-radius: 2px; height: 12px; overflow: hidden; }
+  .comp-bar-fill { height: 100%; border-radius: 2px; }
+
+  .cascade-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .cascade-table th { text-align: left; font-weight: 600; padding: 6px 8px; border-bottom: 2px solid var(--border); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--slate-lt); }
+  .cascade-table td { padding: 6px 8px; border-bottom: 1px solid #f0f2f5; }
+  .cascade-table tr.imminent td { background: var(--red-lt); }
+
+  .effect-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+  .effect-card { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; background: var(--white); border-left: 3px solid transparent; }
+  .effect-card.high { border-left-color: var(--red); background: var(--red-lt); }
+  .effect-card.medium { border-left-color: var(--amber); background: var(--amber-lt); }
+  .effect-card.low { border-left-color: #68d391; background: var(--green-lt); }
+  .effect-label { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
+  .effect-detail { font-size: 11px; color: var(--slate-lt); }
+
+  /* Tooltips */
+  .tip { position: relative; cursor: help; border-bottom: 1px dotted var(--slate-lt); }
+  .tip::after {
+    content: attr(data-tip);
+    position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
+    background: var(--navy); color: #fff; font-size: 11px; font-weight: 400;
+    padding: 6px 10px; border-radius: 4px; white-space: normal; width: 260px;
+    pointer-events: none; opacity: 0; transition: opacity 0.15s; z-index: 100;
+    line-height: 1.4; text-transform: none; letter-spacing: 0;
+  }
+  .tip:hover::after { opacity: 1; }
+  .tip-right::after { left: 0; transform: none; }
+  .tip-left::after { left: auto; right: 0; transform: none; }
+
+  .fuel-methodology { font-size: 11px; color: var(--slate-lt); line-height: 1.6; padding: 12px 16px; background: #f8f9fa; border: 1px solid var(--border); border-radius: var(--radius); margin-top: 12px; }
+  .fuel-methodology strong { color: var(--text); }
+  .staleness-badge { display: inline-block; font-size: 10px; padding: 2px 6px; border-radius: 2px; font-weight: 500; }
+  .staleness-fresh { background: var(--green-lt); color: var(--green); }
+  .staleness-stale { background: var(--amber-lt); color: var(--amber); }
+  .staleness-very-stale { background: var(--red-lt); color: var(--red); }
 
   @media (max-width: 900px) {
     .summary-row { grid-template-columns: 1fr 1fr; }
@@ -208,6 +268,7 @@
 <div class="tab-bar" role="tablist">
   <button class="tab-btn active" id="tab-btn-gulf" role="tab" aria-selected="true" aria-controls="tab-gulf" data-tab="gulf" type="button">Gulf Crisis Monitor</button>
   <button class="tab-btn" id="tab-btn-nz" role="tab" aria-selected="false" aria-controls="tab-nz" data-tab="nz" type="button">NZ Migration Signal</button>
+  <button class="tab-btn" id="tab-btn-fuel" role="tab" aria-selected="false" aria-controls="tab-fuel" data-tab="fuel" type="button">NZ Fuel Security</button>
 </div>
 
 <main>
@@ -539,7 +600,8 @@
           <a href="data/internet.json">internet</a> &middot;
           <a href="data/flights.json">flights</a> &middot;
           <a href="data/thermal_signatures.json">thermal</a> &middot;
-          <a href="data/sar.json">SAR vessels</a>
+          <a href="data/sar.json">SAR vessels</a> &middot;
+          <a href="data/fuel_security.json">fuel security</a>
         </p>
 
         <h4 style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--navy);margin:16px 0 6px;">Citation</h4>
@@ -663,10 +725,136 @@
   </div>
 
 </div>
+
+<!-- NZ Fuel Security Tab -->
+<div class="main tab-section" id="tab-fuel" role="tabpanel" aria-labelledby="tab-btn-fuel">
+
+  <!-- Section 1: Security Gauge + Countdown -->
+  <div class="card" style="border-left:4px solid var(--red);">
+    <div class="section-header">
+      <span class="section-title tip" data-tip="Composite risk score (0-100%) combining 6 weighted indicators. Higher = greater supply chain vulnerability. Based on sigmoid-normalised signals from satellite, market, and stock data.">NZ Fuel Security Status</span>
+      <span class="section-meta" id="fuel-date"></span>
+    </div>
+    <div class="fuel-gauge-wrap">
+      <div class="fuel-gauge">
+        <svg width="140" height="140" viewBox="0 0 140 140">
+          <circle cx="70" cy="70" r="60" fill="none" stroke="#edf2f7" stroke-width="12"/>
+          <circle id="fuel-gauge-arc" cx="70" cy="70" r="60" fill="none" stroke="#48bb78" stroke-width="12"
+                  stroke-dasharray="377" stroke-dashoffset="377" stroke-linecap="round"/>
+        </svg>
+        <div class="fuel-gauge-label">
+          <div class="fuel-gauge-value" id="fuel-gauge-value">—</div>
+          <div class="fuel-gauge-sub" id="fuel-gauge-level">Loading</div>
+        </div>
+      </div>
+      <div class="fuel-countdown">
+        <div class="fuel-countdown-days" id="fuel-countdown-days">—</div>
+        <div class="fuel-countdown-label tip tip-right" data-tip="MSO (Minimum Stock Obligation) is the legal minimum fuel stock NZ must hold: petrol 28d, diesel 21d, jet 24d. This countdown shows the worst-case fuel type based on current depletion trajectory." id="fuel-countdown-label">days until worst fuel type hits MSO minimum</div>
+        <div style="font-size:12px;color:var(--slate-lt);margin-top:4px;" id="fuel-rationing-date"></div>
+      </div>
+      <div style="flex:1;">
+        <p style="font-size:12px;color:var(--slate-lt);line-height:1.6;" id="fuel-context">
+          New Zealand closed its only refinery (Marsden Point) in 2022. The country is 100% dependent on imported refined fuel,
+          with ~40% sourced from refineries dependent on crude transiting the Strait of Hormuz.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Section 2: Days of Supply Cards -->
+  <div>
+    <div class="section-header">
+      <span class="section-title tip" data-tip="Onshore stock = fuel physically in NZ. On-water = fuel on tankers en route. Red MSO line = legal minimum. Cape rerouting via Good Hope adds ~14 days transit vs Hormuz, reducing effective on-water stock.">Days of Supply</span>
+      <span class="section-meta">MBIE stock data &bull; <span class="tip" data-tip="Minimum Stock Obligation — NZ's legally mandated fuel reserve floor. Breaching MSO triggers emergency protocols and potential rationing.">MSO</span> = Minimum Stock Obligation &bull; <span id="stock-staleness"></span></span>
+    </div>
+    <div class="fuel-cards" id="fuel-stock-cards">
+      <p class="empty-state" style="grid-column:1/-1">Loading fuel stock data…</p>
+    </div>
+  </div>
+
+  <!-- Section 3: Component Scores -->
+  <div class="card">
+    <div class="section-header">
+      <span class="section-title tip" data-tip="Each component is mapped to 0-100% via a sigmoid curve. The composite risk is a weighted sum. Sigmoids prevent any single extreme value from dominating — a -55% Hormuz drop scores ~85%, not 100%.">Risk Component Breakdown</span>
+      <span class="section-meta">Weighted: Hormuz 30% &bull; Stock 25% &bull; Price 20% &bull; Supply 10% &bull; Demand 10% &bull; GDELT 5%</span>
+    </div>
+    <div class="component-bars" id="fuel-components">
+      <p class="empty-state">Loading component scores…</p>
+    </div>
+  </div>
+
+  <!-- Section 4: Fuel Price Trend -->
+  <div class="card">
+    <div class="section-header">
+      <span class="section-title">NZ Retail Fuel Prices</span>
+      <span class="section-meta">MBIE weekly monitoring &bull; NZD per litre &bull; <span class="tip" data-tip="Prices include GST and excise duty. Import cost = refinery gate price in NZD. The gap between retail and import cost reflects distributor margins, taxes, and transport.">adjusted retail price</span></span>
+    </div>
+    <div id="fuel-price-chart" style="height:320px;"></div>
+    <p class="empty-state" id="fuel-price-empty" style="display:none">No fuel price data available. Use <code>python manage.py ingest_fuel_prices</code> to load MBIE CSV.</p>
+  </div>
+
+  <!-- Section 5: Upstream Supply Chain -->
+  <div class="card">
+    <div class="section-header">
+      <span class="section-title tip" data-tip="Sentinel-1 SAR detects vessels regardless of AIS transponder status. Counts are normalised for satellite coverage area differences between passes. Pre-war baseline = average of Feb 23 + Feb 25 observations.">Upstream Supply Chain — Hormuz</span>
+      <span class="section-meta">Sentinel-1 SAR vessel detection &bull; coverage-normalised counts</span>
+    </div>
+    <div id="fuel-hormuz-chart" style="height:260px;"></div>
+  </div>
+
+  <!-- Section 6: Industry Impact Cascade -->
+  <div class="card">
+    <div class="section-header">
+      <span class="section-title tip" data-tip="Each industry has a fuel type dependency and impact threshold (days above MSO at which pressure begins). Days-to-impact = (projected stock - threshold) / daily depletion rate. Sorted soonest-first.">Industry Impact Cascade</span>
+      <span class="section-meta">Projected — based on current depletion trajectory &bull; thresholds are domain estimates</span>
+    </div>
+    <div class="table-wrap">
+    <table class="cascade-table">
+      <caption class="sr-only">Industry impact cascade based on fuel depletion projections</caption>
+      <thead><tr>
+        <th scope="col">Industry</th>
+        <th scope="col">Fuel</th>
+        <th scope="col" style="text-align:right" class="tip tip-left" data-tip="Projected days until this industry's primary fuel stock drops below its impact threshold. 'NOW' = already below threshold. Based on linear depletion model.">Days to Impact</th>
+        <th scope="col">Impact Date</th>
+        <th scope="col" class="tip" data-tip="How quickly the industry can reduce fuel consumption. Very low = no substitutes (fishing, agriculture). High = behavioural change possible (commuter driving).">Elasticity</th>
+        <th scope="col" class="tip" data-tip="NZ emergency allocation priority. High = essential services get fuel first. Low = rationed first.">Priority</th>
+        <th scope="col">Effect</th>
+      </tr></thead>
+      <tbody id="fuel-cascade-tbody">
+        <tr><td colspan="7" class="empty-state">Loading…</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </div>
+
+  <!-- Section 7: Second/Third Order Effects -->
+  <div>
+    <div class="section-header">
+      <span class="section-title tip" data-tip="Cascading economic effects triggered when upstream industries hit their impact thresholds. Each effect has a lag (weeks) reflecting real-world propagation delay. 'TRIGGERED' means the upstream condition is already met.">Second &amp; Third Order Effects</span>
+      <span class="section-meta">Projected — based on current depletion trajectory &bull; onset = impact date + lag</span>
+    </div>
+    <div class="effect-cards" id="fuel-effects">
+      <p class="empty-state" style="grid-column:1/-1">Loading…</p>
+    </div>
+  </div>
+
+  <!-- Methodology & Assumptions -->
+  <div class="fuel-methodology" id="fuel-methodology">
+    <strong>Model assumptions &amp; limitations:</strong>
+    NZ imports ~40% of refined fuel from refineries dependent on crude transiting the Strait of Hormuz (configurable parameter).
+    Depletion model assumes linear consumption at current rates and constant Hormuz disruption fraction.
+    Stock data from MBIE quarterly reports may be up to 90 days stale — projected onshore stock adjusts for elapsed days.
+    Cape of Good Hope rerouting (+14 days transit) applied when Hormuz disruption exceeds 30%.
+    Industry cascade thresholds are domain estimates from NZ energy policy literature, not empirically calibrated.
+    Sigmoid scoring prevents any single extreme input from saturating the composite — a total Hormuz closure (100% disruption) scores 0.92, not 1.0.
+    <span id="fuel-methodology-extra"></span>
+  </div>
+
+</div>
 </main>
 
 <footer class="footer">
-  <span>Data: NASA FIRMS &bull; NASA Black Marble VNP46A2 &bull; VIIRS DNB L1B &bull; Sentinel-1 SAR via ASF DAAC &bull; IODA / Georgia Tech &bull; Open-source humanitarian monitoring</span>
+  <span>Data: NASA FIRMS &bull; NASA Black Marble VNP46A2 &bull; VIIRS DNB L1B &bull; Sentinel-1 SAR via ASF DAAC &bull; IODA / Georgia Tech &bull; MBIE NZ Fuel Monitoring &bull; Open-source humanitarian monitoring</span>
   <span id="footer-right">Baseline period: 15 Jan – 27 Feb 2026</span>
 </footer>
 
@@ -1184,7 +1372,8 @@ function renderFireTable(infraFires) {
     tr.appendChild(frpTd);
 
     var confMap = { h: 'conf-h', n: 'conf-n', l: 'conf-l' };
-    tr.appendChild(el('td', { class: confMap[f.confidence] || '' }, (f.confidence || '').toUpperCase()));
+    var confLabel = { h: 'High', n: 'Moderate', l: 'Low' };
+    tr.appendChild(el('td', { class: confMap[f.confidence] || '' }, confLabel[f.confidence] || f.confidence || ''));
     tbody.appendChild(tr);
   });
 
@@ -1236,7 +1425,8 @@ function renderMap(geojson) {
     }
 
     addLine('FRP', frp.toFixed ? frp.toFixed(1) + ' MW' : '— MW');
-    addLine('Confidence', (p.confidence || '').toUpperCase());
+    var confLabel = { h: 'High', n: 'Moderate', l: 'Low' };
+    addLine('Confidence', confLabel[p.confidence] || p.confidence || '');
     addLine('Satellite', p.satellite || '—');
     if (p.nearest_infrastructure) {
       addLine('Near', p.nearest_infrastructure + ' (' + (p.distance_km || '?') + ' km)');
@@ -1255,7 +1445,7 @@ function renderMap(geojson) {
     heading.textContent = 'Legend';
     heading.style.cssText = 'font-weight:600;margin-bottom:4px;color:#1a2744';
     div.appendChild(heading);
-    [['#c0392b','High-confidence fire'],['#ed8936','Nominal fire'],['#2b6cb0','Desalination plant'],['#b7791f','Oil / gas infrastructure']]
+    [['#c0392b','High-confidence fire'],['#ed8936','Moderate-confidence fire'],['#2b6cb0','Desalination plant'],['#b7791f','Oil / gas infrastructure']]
       .forEach(function (row) {
         var d = document.createElement('div');
         var dot = document.createElement('span');
@@ -1780,6 +1970,330 @@ function initNZCitySelect(cities) {
   if (cities.length) { sel.value = cities[0]; renderNZNightlightChart(cities[0]); }
 }
 
+// ── Fuel Security data ────────────────────────────────────────────────────
+load(DATA + '/fuel_security.json').then(function (fuel) {
+  renderFuelSecurity(fuel);
+}).catch(function () {
+  var cards = document.getElementById('fuel-stock-cards');
+  if (cards) {
+    cards.textContent = '';
+    cards.appendChild(el('p', { class: 'empty-state', style: 'grid-column:1/-1' }, 'Fuel security data not available. Run export_static to generate fuel_security.json.'));
+  }
+});
+
+// Also load SAR data for the Hormuz mini-chart on fuel tab
+load(DATA + '/sar.json').then(function (sar) {
+  renderFuelHormuzChart(sar);
+}).catch(function () {});
+
+function renderFuelSecurity(fuel) {
+  var ind = fuel.indicator;
+  if (!ind) return;
+
+  // Gauge
+  var risk = ind.fuel_security_risk;
+  var arc = document.getElementById('fuel-gauge-arc');
+  var circumference = 2 * Math.PI * 60; // r=60
+  var offset = circumference * (1 - risk);
+  arc.setAttribute('stroke-dashoffset', String(offset));
+  var gaugeColor = risk >= 0.6 ? 'var(--red)' : risk >= 0.4 ? '#ed8936' : risk >= 0.2 ? '#ecc94b' : '#48bb78';
+  arc.setAttribute('stroke', gaugeColor);
+  setText('fuel-gauge-value', (risk * 100).toFixed(0) + '%');
+  setText('fuel-gauge-level', ind.security_level.toUpperCase());
+  document.getElementById('fuel-gauge-value').style.color = gaugeColor;
+  setText('fuel-date', ind.date);
+
+  // Countdown
+  if (ind.estimated_days_to_mso != null) {
+    setText('fuel-countdown-days', Math.round(ind.estimated_days_to_mso));
+  } else {
+    setText('fuel-countdown-days', 'N/A');
+  }
+  if (ind.estimated_rationing_date) {
+    setText('fuel-rationing-date', 'Projected rationing: ' + ind.estimated_rationing_date);
+  }
+
+  // Stock cards
+  var proj = ind.depletion_projections || {};
+  var stockCards = document.getElementById('fuel-stock-cards');
+  stockCards.textContent = '';
+
+  var fuelLabels = { petrol: 'Petrol', diesel: 'Diesel', jet: 'Jet Fuel' };
+  var fuelColors = { petrol: '#3182ce', diesel: '#e53e3e', jet: '#ed8936' };
+
+  ['petrol', 'diesel', 'jet'].forEach(function (ft) {
+    var p = proj[ft];
+    if (!p) return;
+
+    var card = el('div', { class: 'fuel-card' });
+    card.appendChild(el('div', { class: 'fuel-card-type' }, fuelLabels[ft]));
+
+    // Bar showing current stock vs capacity
+    var maxDays = Math.max(p.onshore_days + (p.on_water_days || 0) + 10, 70);
+    var mso = p.mso_minimum;
+    var onshore = p.projected_onshore;
+    var total = p.total_effective;
+
+    var track = el('div', { class: 'fuel-bar-track' });
+
+    // On-water fill (lighter)
+    var waterWidth = ((total - onshore) / maxDays * 100);
+    var onshoreWidth = (onshore / maxDays * 100);
+    if (waterWidth > 0) {
+      var waterFill = el('div', { class: 'fuel-bar-fill', style: 'position:absolute;left:' + onshoreWidth + '%;width:' + waterWidth + '%;background:' + fuelColors[ft] + ';opacity:0.3' });
+      track.appendChild(waterFill);
+    }
+
+    // Onshore fill
+    var barColor = onshore < mso ? 'var(--red)' : onshore < mso * 1.5 ? '#ed8936' : fuelColors[ft];
+    var fill = el('div', { class: 'fuel-bar-fill', style: 'width:' + onshoreWidth + '%;background:' + barColor });
+    track.appendChild(fill);
+
+    // MSO line
+    var msoPos = (mso / maxDays * 100);
+    var msoLine = el('div', { class: 'fuel-bar-mso', style: 'left:' + msoPos + '%' });
+    var msoLabel = el('div', { class: 'fuel-bar-mso-label', style: 'left:' + msoPos + '%' }, 'MSO ' + mso + 'd');
+    track.appendChild(msoLine);
+    track.appendChild(msoLabel);
+
+    card.appendChild(track);
+
+    var labels = el('div', { class: 'fuel-bar-labels' });
+    labels.appendChild(el('span', null, 'Onshore: ' + onshore.toFixed(1) + 'd'));
+    labels.appendChild(el('span', null, 'On-water: ' + (p.effective_on_water || 0).toFixed(1) + 'd'));
+    labels.appendChild(el('span', null, 'Total: ' + total.toFixed(1) + 'd'));
+    card.appendChild(labels);
+
+    if (p.cape_delay_days > 0) {
+      card.appendChild(el('div', { style: 'font-size:10px;color:var(--amber);margin-top:4px' }, 'Cape rerouting adds ' + p.cape_delay_days + ' days — on-water stock adjusted'));
+    }
+    if (p.days_to_mso != null) {
+      card.appendChild(el('div', { style: 'font-size:11px;margin-top:4px;font-weight:500;color:' + (p.days_to_mso < 30 ? 'var(--red)' : 'var(--text)') },
+        p.days_to_mso.toFixed(0) + ' days to MSO minimum'));
+    }
+
+    stockCards.appendChild(card);
+  });
+
+  // Stock staleness badge
+  var methodology = fuel.methodology || {};
+  var staleEl = document.getElementById('stock-staleness');
+  if (staleEl && methodology.confidence_notes && methodology.confidence_notes.stock_staleness) {
+    var staleText = methodology.confidence_notes.stock_staleness;
+    var staleMatch = staleText.match(/(\d+) days/);
+    var staleDays = staleMatch ? parseInt(staleMatch[1]) : 0;
+    var staleClass = staleDays > 60 ? 'staleness-very-stale' : staleDays > 14 ? 'staleness-stale' : 'staleness-fresh';
+    staleEl.textContent = '';
+    var badge = el('span', { class: 'staleness-badge ' + staleClass }, staleText);
+    staleEl.appendChild(badge);
+  }
+
+  // Methodology extra info
+  var methExtra = document.getElementById('fuel-methodology-extra');
+  if (methExtra && methodology.confidence_notes) {
+    var cn = methodology.confidence_notes;
+    var parts = [];
+    if (cn.price_coverage) parts.push(cn.price_coverage);
+    if (cn.sar_observations) parts.push(cn.sar_observations);
+    if (parts.length) methExtra.textContent = ' Data coverage: ' + parts.join('. ') + '.';
+  }
+
+  // Component bars
+  var comps = ind.components || {};
+  var compEl = document.getElementById('fuel-components');
+  compEl.textContent = '';
+
+  var compLabels = [
+    ['hormuz_disruption', 'Hormuz Disruption', '30%', 'SAR vessel detections at Strait of Hormuz vs pre-war baseline. Sigmoid midpoint at -30% drop. Current Hormuz is at ~45% of normal traffic.'],
+    ['stock_depletion', 'Stock Depletion', '25%', 'Worst fuel type\u2019s projected days above MSO minimum. Sigmoid midpoint at 10 days above MSO. Stock data may be up to 90 days old.'],
+    ['price_acceleration', 'Price Acceleration', '20%', 'Average week-on-week % change in MBIE retail fuel prices (all types). Sigmoid midpoint at +10% weekly change.'],
+    ['supply_chain', 'Supply Chain', '10%', 'Correlated with Hormuz disruption (0.8x dampening). Proxies for refinery-level disruption downstream of crude supply cuts.'],
+    ['demand_signal', 'Demand Signal', '10%', 'NZ flight activity (OpenSky ADS-B) as demand proxy. Falling flights = demand destruction / self-rationing. Sigmoid midpoint at -15%.'],
+    ['gdelt_narrative', 'GDELT Narrative', '5%', 'GDELT crisis event mentions of fuel shortage in NZ media. Sigmoid midpoint at 5 events. Currently limited by API rate limits.'],
+  ];
+
+  compLabels.forEach(function (c) {
+    var val = comps[c[0]] || 0;
+    var row = el('div', { class: 'comp-bar-row', title: c[3] });
+    var label = el('span', { class: 'tip', 'data-tip': c[3] }, c[1]);
+    row.appendChild(label);
+    var track2 = el('div', { class: 'comp-bar-track' });
+    var color2 = val >= 0.6 ? 'var(--red)' : val >= 0.3 ? '#ed8936' : '#48bb78';
+    track2.appendChild(el('div', { class: 'comp-bar-fill', style: 'width:' + (val * 100) + '%;background:' + color2 }));
+    row.appendChild(track2);
+    row.appendChild(el('span', { style: 'font-family:var(--font-mono);text-align:right' }, (val * 100).toFixed(0) + '%'));
+    compEl.appendChild(row);
+  });
+
+  // Fuel price chart
+  var prices = fuel.prices || {};
+  var hasPrices = Object.keys(prices).length > 0;
+  if (hasPrices) {
+    var traces = [];
+    var priceLabels = { '91': 'Regular 91', '95': 'Premium 95', 'diesel': 'Diesel' };
+    var priceColors = { '91': '#3182ce', '95': '#6b46c1', 'diesel': '#e53e3e' };
+    Object.keys(priceLabels).forEach(function (ft2) {
+      var series2 = prices[ft2];
+      if (!series2 || !series2.length) return;
+      // Retail price trace
+      traces.push({
+        x: series2.map(function (p2) { return p2.date; }),
+        y: series2.map(function (p2) { return p2.retail; }),
+        name: priceLabels[ft2] + ' (retail)',
+        type: 'scatter',
+        mode: 'lines',
+        line: { color: priceColors[ft2], width: 2 },
+        hovertemplate: '<b>' + priceLabels[ft2] + '</b><br>Retail: $%{y:.3f}/L<br>%{x}<extra></extra>',
+      });
+      // Import cost trace (thinner, dashed)
+      var hasImport = series2.some(function (p2) { return p2.import_cost != null; });
+      if (hasImport) {
+        traces.push({
+          x: series2.filter(function (p2) { return p2.import_cost != null; }).map(function (p2) { return p2.date; }),
+          y: series2.filter(function (p2) { return p2.import_cost != null; }).map(function (p2) { return p2.import_cost; }),
+          name: priceLabels[ft2] + ' (import cost)',
+          type: 'scatter',
+          mode: 'lines',
+          line: { color: priceColors[ft2], width: 1, dash: 'dot' },
+          hovertemplate: '<b>' + priceLabels[ft2] + ' import</b><br>Cost: $%{y:.3f}/L<br>%{x}<extra></extra>',
+          showlegend: false,
+        });
+      }
+    });
+    if (traces.length) {
+      Plotly.newPlot('fuel-price-chart', traces, {
+        margin: { t: 10, r: 20, b: 60, l: 50 },
+        xaxis: {
+          title: '', gridcolor: '#edf2f7',
+          range: ['2025-01-01', '2026-04-01'],
+          rangeslider: { visible: true, thickness: 0.08 },
+          rangeselector: {
+            buttons: [
+              { count: 3, label: '3m', step: 'month', stepmode: 'backward' },
+              { count: 1, label: '1y', step: 'year', stepmode: 'backward' },
+              { count: 5, label: '5y', step: 'year', stepmode: 'backward' },
+              { step: 'all', label: 'All' },
+            ],
+            x: 0, y: 1.12,
+          },
+        },
+        yaxis: { title: 'NZD / litre', gridcolor: '#edf2f7', fixedrange: true },
+        legend: { orientation: 'h', y: 1.18 },
+        shapes: [{
+          type: 'line', x0: '2026-02-28', x1: '2026-02-28', y0: 0, y1: 1, yref: 'paper',
+          line: { color: '#c0392b', width: 1.5, dash: 'dash' },
+        }],
+        annotations: [{
+          x: '2026-02-28', y: 1, yref: 'paper', text: 'War begins (Feb 28)', showarrow: false,
+          font: { size: 10, color: '#c0392b' }, yanchor: 'bottom',
+        }],
+        paper_bgcolor: 'transparent', plot_bgcolor: 'transparent', font: { family: 'Inter, sans-serif', size: 11, color: '#4a5568' },
+        hovermode: 'x unified',
+      }, { responsive: true, displayModeBar: false });
+    }
+  } else {
+    document.getElementById('fuel-price-chart').style.display = 'none';
+    document.getElementById('fuel-price-empty').style.display = 'block';
+  }
+
+  // Industry cascade table
+  var cascade = (proj.industry_cascade || []);
+  var tbody = document.getElementById('fuel-cascade-tbody');
+  tbody.textContent = '';
+
+  if (!cascade.length) {
+    var emptyR = el('tr');
+    emptyR.appendChild(el('td', { colspan: '7', class: 'empty-state' }, 'No cascade data available'));
+    tbody.appendChild(emptyR);
+  } else {
+    cascade.forEach(function (ic) {
+      var tr = el('tr');
+      if (ic.days_to_impact != null && ic.days_to_impact < 14) tr.className = 'imminent';
+      tr.appendChild(el('td', { style: 'font-weight:500' }, ic.industry));
+      tr.appendChild(el('td', null, ic.fuel_type));
+      var dtiText = ic.days_to_impact != null ? (ic.days_to_impact === 0 ? 'NOW' : ic.days_to_impact.toFixed(0)) : '—';
+      var dtiStyle = 'text-align:right;font-family:var(--font-mono);font-weight:600;';
+      if (ic.days_to_impact != null && ic.days_to_impact < 14) dtiStyle += 'color:var(--red);';
+      tr.appendChild(el('td', { style: dtiStyle }, dtiText));
+      tr.appendChild(el('td', null, ic.impact_date ? ic.impact_date : '—'));
+      tr.appendChild(el('td', null, ic.elasticity.replace('_', ' ')));
+      var priBadge = el('span', { class: 'badge badge-' + (ic.priority === 'high' ? 'high' : ic.priority === 'medium' ? 'elevated' : 'normal') }, ic.priority);
+      var priTd = el('td');
+      priTd.appendChild(priBadge);
+      tr.appendChild(priTd);
+      tr.appendChild(el('td', { style: 'font-size:11px;color:var(--slate-lt)' }, ic.effect));
+      tbody.appendChild(tr);
+    });
+  }
+
+  // Second-order effects
+  var effects = (proj.second_order_effects || []);
+  var effectsEl = document.getElementById('fuel-effects');
+  effectsEl.textContent = '';
+
+  if (!effects.length) {
+    effectsEl.appendChild(el('p', { class: 'empty-state', style: 'grid-column:1/-1' }, 'No second-order effect data'));
+  } else {
+    effects.forEach(function (eff) {
+      var card2 = el('div', { class: 'effect-card ' + eff.severity });
+      card2.appendChild(el('div', { class: 'effect-label' }, eff.effect));
+      var statusText = eff.triggered ? 'TRIGGERED' : 'Monitoring';
+      var statusColor = eff.triggered ? 'var(--red)' : 'var(--slate-lt)';
+      card2.appendChild(el('div', { style: 'font-size:11px;font-weight:600;color:' + statusColor + ';margin-bottom:4px' }, statusText));
+      card2.appendChild(el('div', { class: 'effect-detail' }, eff.explanation));
+      if (eff.onset_date) {
+        card2.appendChild(el('div', { class: 'effect-detail', style: 'margin-top:4px' },
+          'Estimated onset: ' + eff.onset_date + ' (+' + eff.lag_weeks + ' weeks)'));
+      }
+      if (eff.trigger_industry) {
+        card2.appendChild(el('div', { class: 'effect-detail' }, 'Trigger: ' + eff.trigger_industry + ' impact'));
+      }
+      effectsEl.appendChild(card2);
+    });
+  }
+}
+
+function renderFuelHormuzChart(sar) {
+  var hormuz = sar['Strait of Hormuz'] || sar['Hormuz'];
+  if (!hormuz || !hormuz.length) return;
+
+  var dates = hormuz.map(function (d) { return d.date; });
+  var counts = hormuz.map(function (d) { return d.normalised_count || d.vessel_count; });
+  var baseline = hormuz[0].baseline_count;
+
+  var pctChanges = hormuz.map(function (d) { return d.pct_change; });
+  var traces = [{
+    x: dates, y: counts, name: 'Vessel count (coverage-normalised)', type: 'scatter',
+    mode: 'lines+markers', line: { color: '#3182ce', width: 2 }, marker: { size: 5 },
+    customdata: pctChanges,
+    hovertemplate: '<b>%{x}</b><br>Vessels: %{y:.0f}<br>vs baseline: %{customdata:+.1f}%<extra></extra>',
+  }];
+  if (baseline) {
+    traces.push({
+      x: [dates[0], dates[dates.length - 1]], y: [baseline, baseline],
+      name: 'Pre-war baseline (' + Math.round(baseline) + ')', type: 'scatter', mode: 'lines',
+      line: { color: '#a0aec0', width: 1, dash: 'dash' },
+      hovertemplate: 'Baseline: %{y:.0f} vessels<extra></extra>',
+    });
+  }
+
+  Plotly.newPlot('fuel-hormuz-chart', traces, {
+    margin: { t: 10, r: 20, b: 40, l: 50 },
+    xaxis: { title: '', gridcolor: '#edf2f7' },
+    yaxis: { title: 'Vessels (coverage-normalised)', gridcolor: '#edf2f7' },
+    legend: { orientation: 'h', y: 1.08 },
+    shapes: [{
+      type: 'line', x0: '2026-02-28', x1: '2026-02-28', y0: 0, y1: 1, yref: 'paper',
+      line: { color: '#c0392b', width: 1.5, dash: 'dash' },
+    }],
+    annotations: [{
+      x: '2026-02-28', y: 1, yref: 'paper', text: 'War begins', showarrow: false,
+      font: { size: 10, color: '#c0392b' }, yanchor: 'bottom',
+    }],
+    paper_bgcolor: 'transparent', plot_bgcolor: 'transparent', font: { family: 'Inter, sans-serif', size: 11, color: '#4a5568' },
+  }, { responsive: true, displayModeBar: false });
+}
+
 // ── tab switching ─────────────────────────────────────────────────────────
 window.switchTab = function switchTab(tab) {
   document.querySelectorAll('.tab-section').forEach(function (s) { s.classList.remove('active'); });
@@ -1797,8 +2311,19 @@ window.switchTab = function switchTab(tab) {
       b.classList.add('active');
       b.setAttribute('aria-selected', 'true');
       if (tab === 'nz') b.classList.add('nz-active');
+      if (tab === 'fuel') b.classList.add('fuel-active');
     }
   });
+
+  // Resize Plotly charts on fuel tab (needs visible container)
+  if (tab === 'fuel') {
+    requestAnimationFrame(function () {
+      var fpc = document.getElementById('fuel-price-chart');
+      var fhc = document.getElementById('fuel-hormuz-chart');
+      if (fpc && fpc.data) Plotly.Plots.resize(fpc);
+      if (fhc && fhc.data) Plotly.Plots.resize(fhc);
+    });
+  }
 
   // Initialise NZ map on first switch (Leaflet needs visible container)
   if (tab === 'nz' && window._nzMap) {
