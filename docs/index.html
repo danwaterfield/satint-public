@@ -118,7 +118,7 @@
   .status-degraded  { background: #ed8936; color: #fff; }
   .status-offline   { background: #718096; color: #fff; }
   .status-damaged   { background: #c0392b; color: #fff; }
-  .status-unknown   { background: #a0aec0; color: #fff; }
+  .status-unknown   { background: #e2e8f0; color: #4a5568; }
 
   table { width: 100%; border-collapse: collapse; font-size: 12px; }
   th {
@@ -196,6 +196,7 @@
     <span class="topbar-sub">Satellite Intelligence Pipeline &mdash; v0.1</span>
   </div>
   <div class="topbar-right">
+    <a href="#methodology" style="color:#a0b0c8;text-decoration:none;font-size:11px;">Methodology</a>
     <span><span class="status-dot"></span>Static export</span>
     <span class="topbar-date" id="topbar-date"></span>
     <span id="topbar-updated"></span>
@@ -290,20 +291,8 @@
     </div>
   </div>
 
-  <!-- Nightlight chart + vessel table -->
+  <!-- Vessel table + Fire map -->
   <div class="two-col">
-    <div class="card">
-      <div class="section-header">
-        <span class="section-title">Nighttime Radiance</span>
-        <span class="section-meta">vs. pre-war baseline (15 Jan – 27 Feb 2026)</span>
-      </div>
-      <div class="chart-controls">
-        <label for="city-select">Location</label>
-        <select id="city-select" class="ctrl-select"></select>
-      </div>
-      <div id="nightlight-chart"></div>
-    </div>
-
     <div class="card">
       <div class="section-header">
         <span class="section-title">Maritime Chokepoint Traffic</span>
@@ -327,10 +316,7 @@
       </table>
       </div>
     </div>
-  </div>
 
-  <!-- Fire map + nightlight table -->
-  <div class="two-col">
     <div class="card">
       <div class="section-header">
         <span class="section-title">Active Fire Detections</span>
@@ -338,7 +324,10 @@
       </div>
       <div id="fire-map" role="img" aria-label="Active fire detection map showing Gulf region"></div>
     </div>
+  </div>
 
+  <!-- Nightlight deviation table + single-city drill-down -->
+  <div class="two-col">
     <div class="card">
       <div class="section-header">
         <span class="section-title">Nightlight Deviation by City</span>
@@ -360,6 +349,18 @@
         </tbody>
       </table>
       </div>
+    </div>
+
+    <div class="card">
+      <div class="section-header">
+        <span class="section-title">Nighttime Radiance — Detail</span>
+        <span class="section-meta">vs. pre-war baseline (15 Jan – 27 Feb 2026)</span>
+      </div>
+      <div class="chart-controls">
+        <label for="city-select">Location</label>
+        <select id="city-select" class="ctrl-select"></select>
+      </div>
+      <div id="nightlight-chart"></div>
     </div>
   </div>
 
@@ -496,6 +497,57 @@
       </tbody>
     </table>
     </div>
+  </div>
+
+  <!-- Methodology & Sources -->
+  <div class="card" id="methodology">
+    <details>
+      <summary style="cursor:pointer;font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--navy);">
+        Methodology &amp; Data Sources
+      </summary>
+      <div style="margin-top:16px;font-size:12px;line-height:1.7;color:#4a5568;">
+        <h4 style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--navy);margin:12px 0 6px;">Data Sources</h4>
+        <table style="font-size:11px;">
+          <tr><th>Source</th><th>Update Freq.</th><th>Resolution</th><th>Access</th></tr>
+          <tr><td>NASA FIRMS (VIIRS active fires)</td><td>4-hourly</td><td>375m</td><td>Free</td></tr>
+          <tr><td>NASA Black Marble VNP46A2</td><td>Daily (11-day lag)</td><td>500m</td><td>Free</td></tr>
+          <tr><td>VIIRS DNB L1B swaths</td><td>Daily (~3h lag)</td><td>750m</td><td>Free</td></tr>
+          <tr><td>Sentinel-1 SAR</td><td>6-day revisit</td><td>10m</td><td>Free</td></tr>
+          <tr><td>IODA / Cloudflare</td><td>Daily</td><td>Country</td><td>Free</td></tr>
+          <tr><td>OpenSky ADS-B</td><td>Daily</td><td>Airport</td><td>Free (rate-limited)</td></tr>
+          <tr><td>GDELT</td><td>Daily</td><td>Country</td><td>Free (rate-limited)</td></tr>
+        </table>
+
+        <h4 style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--navy);margin:16px 0 6px;">Methodology Notes</h4>
+        <ul style="padding-left:18px;">
+          <li><strong>Baseline period:</strong> 15 Jan &ndash; 27 Feb 2026 (pre-war)</li>
+          <li><strong>% change:</strong> (current &minus; baseline) / baseline &times; 100</li>
+          <li><strong>Compound risk:</strong> Weighted composite of 8 normalised factors &mdash; NL 20%, Fire 15%, Trade 15%, NO&#8322; 12%, Internet 12%, Flights 10%, GDELT 8%, Thermal 8%</li>
+          <li><strong>DNB L1B caveat:</strong> No lunar illumination or straylight correction &mdash; absolute values less reliable than relative day-to-day trends</li>
+          <li><strong>Cloud cover:</strong> Tracked per observation as quality indicator, not filtered. High cloud fraction reduces confidence.</li>
+          <li><strong>Ramadan caveat:</strong> Baseline is pre-Ramadan. Behavioral changes (later activity, outdoor lighting) may affect nightlight comparisons.</li>
+          <li><strong>Infrastructure &ldquo;No Data&rdquo;:</strong> Flaring facilities (oil, LNG) normally emit detectable thermal signatures. Absence of FIRMS detections may indicate offline status or a data gap &mdash; reported as &ldquo;No Data&rdquo; rather than confirmed &ldquo;Offline&rdquo;.</li>
+        </ul>
+
+        <h4 style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--navy);margin:16px 0 6px;">Download Data</h4>
+        <p>All data is available as JSON:
+          <a href="data/meta.json">meta</a> &middot;
+          <a href="data/nightlights.json">nightlights</a> &middot;
+          <a href="data/fires.json">fires</a> &middot;
+          <a href="data/fires_geojson.json">fires (GeoJSON)</a> &middot;
+          <a href="data/compound_risk.json">compound risk</a> &middot;
+          <a href="data/internet.json">internet</a> &middot;
+          <a href="data/flights.json">flights</a> &middot;
+          <a href="data/thermal_signatures.json">thermal</a> &middot;
+          <a href="data/sar.json">SAR vessels</a>
+        </p>
+
+        <h4 style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--navy);margin:16px 0 6px;">Citation</h4>
+        <p style="font-family:var(--font-mono);font-size:10px;background:#f7f8fa;padding:8px;border-radius:3px;">
+          Gulf Region Compound Risk Monitor. Satellite Intelligence Pipeline. [Date accessed]. Available at: https://danwaterfield.github.io/satint-public/
+        </p>
+      </div>
+    </details>
   </div>
 
 </div>
@@ -940,7 +992,10 @@ function renderRisk(riskData) {
   var grid = document.getElementById('risk-grid');
   grid.textContent = '';
 
-  var indicators = riskData.indicators || [];
+  var indicators = (riskData.indicators || []).filter(function (ind) {
+    return NZ_CITIES.indexOf(ind.aoi_name) === -1
+      && CONTROL_CITIES.indexOf(ind.aoi_name) === -1;
+  });
   if (!indicators.length) {
     grid.appendChild(el('p', { class: 'empty-state', style: 'grid-column:1/-1' },
       'Risk data not yet available for today.'));
@@ -977,13 +1032,19 @@ function renderRisk(riskData) {
     card.appendChild(track);
 
     var subs = el('div', { class: 'sub-scores' });
-    [['Nightlight', ind.nightlight_score], ['Fire', ind.fire_activity_score], ['Trade', ind.trade_flow_score]]
-      .forEach(function (pair) {
-        var item = el('div', { class: 'sub-score-item' });
-        item.appendChild(el('div', { class: 'sub-score-label' }, pair[0]));
-        item.appendChild(el('div', { class: 'sub-score-val' }, pair[1] != null ? pair[1].toFixed(2) : '\u2014'));
-        subs.appendChild(item);
-      });
+    subs.style.gridTemplateColumns = '1fr 1fr 1fr 1fr';
+    [
+      ['NL', ind.nightlight_score], ['Fire', ind.fire_activity_score],
+      ['Trade', ind.trade_flow_score], ['NO\u2082', ind.no2_score],
+      ['Internet', ind.internet_score], ['Flights', ind.flight_score],
+      ['GDELT', ind.gdelt_score], ['Thermal', ind.thermal_score],
+    ].forEach(function (pair) {
+      var item = el('div', { class: 'sub-score-item' });
+      item.appendChild(el('div', { class: 'sub-score-label' }, pair[0]));
+      item.appendChild(el('div', { class: 'sub-score-val' },
+        pair[1] != null ? pair[1].toFixed(2) : '\u2014'));
+      subs.appendChild(item);
+    });
     card.appendChild(subs);
     grid.appendChild(card);
   });
@@ -1008,8 +1069,9 @@ function renderNLTable(nlAllData) {
   var tbody = document.getElementById('nl-tbody');
   tbody.textContent = '';
 
-  // Take latest observation per city
+  // Take latest observation per city — Gulf only
   var cities = Object.keys(nlAllData).sort();
+  cities = cities.filter(isGulfCity);
   if (!cities.length) {
     var row = el('tr');
     row.appendChild(el('td', { colspan: '4', class: 'empty-state' }, 'No nightlight data.'));
@@ -1064,7 +1126,9 @@ function renderVesselTable(sarData) {
   var tbody = document.getElementById('vessel-tbody');
   tbody.textContent = '';
 
+  var NZ_LOCATIONS = ['NZ East Approach', 'NZ North Approach', 'Silo Marina', 'Viaduct Harbour', 'Westhaven Marina'];
   var entries = Object.entries(sarData);
+  entries = entries.filter(function (e) { return NZ_LOCATIONS.indexOf(e[0]) === -1; });
   if (!entries.length) {
     var row = el('tr');
     row.appendChild(el('td', { colspan: '5', class: 'empty-state' }, 'No vessel data — SAR processing pending.'));
@@ -1345,9 +1409,14 @@ function renderInfraTable(data) {
     tr.appendChild(el('td', { style: 'font-weight:500' }, name.length > 25 ? name.slice(0, 25) + '\u2026' : name));
     tr.appendChild(el('td', { style: 'font-size:11px;color:var(--slate-lt)' }, latest.profile || ''));
 
+    var statusText = (latest.status || 'unknown').toUpperCase();
+    var statusClass = 'status-' + (latest.status || 'unknown');
+    if (latest.data_caveat) {
+      statusText = 'No Data';
+      statusClass = 'status-unknown';
+    }
     var statusTd = el('td');
-    statusTd.appendChild(el('span', { class: 'badge status-' + (latest.status || 'unknown') },
-      (latest.status || 'unknown').toUpperCase()));
+    statusTd.appendChild(el('span', { class: 'badge ' + statusClass, title: latest.data_caveat || '' }, statusText));
     tr.appendChild(statusTd);
 
     tr.appendChild(el('td', { class: 'mono', style: 'text-align:right' }, String(latest.fire_count || 0)));
@@ -1380,7 +1449,10 @@ function renderInfraTable(data) {
 }
 
 function renderFlightData(data) {
-  var airports = Object.keys(data).sort();
+  var airports = Object.keys(data).filter(function (name) {
+    var records = data[name];
+    return records.length > 0 && records[0].country !== 'New Zealand';
+  }).sort();
   var select = document.getElementById('flight-airport-select');
   var tbody = document.getElementById('flight-tbody');
 
