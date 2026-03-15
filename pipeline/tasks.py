@@ -2304,6 +2304,7 @@ def calculate_fuel_security_indicator(self):
     today = date.today()
 
     # --- 1. Hormuz disruption score (30%) ---
+    # Recency-weighted: most recent SAR reading counts most (weights: 0.6, 0.25, 0.15)
     hormuz_sar = list(
         SARVesselDetection.objects.filter(
             chokepoint__name__icontains="Hormuz",
@@ -2313,7 +2314,12 @@ def calculate_fuel_security_indicator(self):
         .order_by("-date")
         .values_list("pct_change", flat=True)[:3]
     )
-    avg_hormuz_pct = sum(hormuz_sar) / len(hormuz_sar) if hormuz_sar else 0
+    if hormuz_sar:
+        recency_weights = [0.6, 0.25, 0.15][:len(hormuz_sar)]
+        w_total = sum(recency_weights)
+        avg_hormuz_pct = sum(v * w for v, w in zip(hormuz_sar, recency_weights)) / w_total
+    else:
+        avg_hormuz_pct = 0
     # Negative pct_change = disruption
     hormuz_score = _sigmoid_score(-avg_hormuz_pct, 30, steepness=0.08)
 
@@ -2349,36 +2355,47 @@ def calculate_fuel_security_indicator(self):
             days_above_mso = onshore.days_of_supply - mso
             total_days = onshore.days_of_supply + (on_water.days_of_supply if on_water else 0)
 
-            # Depletion model
+            # Depletion model — calibrated against MBIE actuals (Mar 15 2026)
             hormuz_disruption_frac = max(0, -avg_hormuz_pct / 100) if hormuz_sar else 0
             nz_hormuz_dependency = 0.40
             resupply_reduction = hormuz_disruption_frac * nz_hormuz_dependency
+
+            # Demand surge multiplier: panic buying accelerates consumption
+            # NZ Herald Mar 15: Gull reported 15%+ demand surge, $3/L breached
+            # Fuel demand elasticity is low — price rises cause initial panic buying
+            # then demand destruction. Net effect ~10-15% at peak.
+            # Scale: 0% price rise = 1.0x, 10% = 1.05x, 20% = 1.10x, 30%+ = 1.15x
+            demand_surge = 1.0 + min(0.15, max(0, avg_price_pct) * 0.005)
 
             # Days elapsed since stock measurement
             days_elapsed = (today - latest_stock_date).days
 
             # Project current onshore stock
-            if resupply_reduction > 0:
-                net_daily_depletion = resupply_reduction  # fraction of daily consumption lost
+            # Net depletion = supply loss + excess demand
+            # Supply loss: fraction of daily consumption not resupplied
+            # Demand surge: fraction of extra consumption beyond normal
+            supply_loss_rate = resupply_reduction
+            demand_excess_rate = demand_surge - 1.0  # e.g. 0.15 = 15% extra
+            net_daily_depletion = supply_loss_rate + demand_excess_rate
+
+            if net_daily_depletion > 0:
                 projected_onshore = onshore.days_of_supply - (days_elapsed * net_daily_depletion)
                 projected_onshore = max(0, projected_onshore)
                 projected_days_above_mso = projected_onshore - mso
 
-                if net_daily_depletion > 0:
-                    days_to_mso = max(0, projected_days_above_mso / net_daily_depletion)
-                else:
-                    days_to_mso = None
+                days_to_mso = max(0, projected_days_above_mso / net_daily_depletion)
             else:
                 projected_onshore = onshore.days_of_supply
                 projected_days_above_mso = days_above_mso
                 days_to_mso = None
 
-            # On-water adjustment: if rerouting via Cape adds ~14 days
-            cape_delay = 14 if hormuz_disruption_frac > 0.3 else 0
+            # On-water adjustment: any significant Hormuz disruption forces
+            # Cape of Good Hope rerouting (+14 days transit time)
+            cape_delay = 14 if hormuz_disruption_frac > 0.10 else 0
             effective_on_water = max(0, (on_water.days_of_supply if on_water else 0) - cape_delay)
 
             # Store the actual daily depletion rate for cascade calculations
-            daily_depletion_rate = resupply_reduction if resupply_reduction > 0 else 0
+            daily_depletion_rate = net_daily_depletion
 
             depletion_projections[fuel_type] = {
                 "onshore_days": round(onshore.days_of_supply, 1),
@@ -2391,6 +2408,9 @@ def calculate_fuel_security_indicator(self):
                 "cape_delay_days": cape_delay,
                 "total_effective": round(projected_onshore + effective_on_water, 1),
                 "daily_depletion_rate": round(daily_depletion_rate, 4),
+                "supply_loss_rate": round(supply_loss_rate, 4),
+                "demand_surge_multiplier": round(demand_surge, 3),
+                "demand_excess_rate": round(demand_excess_rate, 4),
                 "stock_measurement_date": latest_stock_date.isoformat(),
                 "days_since_measurement": days_elapsed,
                 "hormuz_disruption_fraction": round(hormuz_disruption_frac, 4),
