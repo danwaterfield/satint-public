@@ -1,7 +1,7 @@
 # Iran Crisis Autoresearcher — Design Specification
 
 **Date:** 2026-03-16
-**Status:** Draft
+**Status:** Reviewed
 **Project:** autoresearcher-irancrisis
 **Location:** /Users/danielwaterfield/Documents/autoresearcher-irancrisis/
 
@@ -9,7 +9,7 @@
 
 A Bayesian network scenario modelling system that explores possible outcomes of the 2026 Iran war and their downstream effects on New Zealand. LLM-guided explorer agents search the space of causal assumptions, Monte Carlo sampling produces probability distributions over outcomes, and an Opus synthesis layer generates publication-quality briefings for the GitHub Pages dashboard.
 
-This adapts the autoresearcher-nz architectural pattern (explorer loop, cross-pollination, Opus synthesis) but replaces the Mesa agent-based health simulation with a pgmpy Bayesian network. No Django, no Mesa, no database.
+This adapts the autoresearcher-nz architectural pattern (explorer loop, cross-pollination, Opus synthesis) but replaces the Mesa agent-based health simulation with a forward Monte Carlo simulator using conditional sampling. No Django, no Mesa, no database, no heavy framework — just numpy/scipy distribution sampling in a day-by-day loop.
 
 ## Design Decisions & Rationale
 
@@ -17,7 +17,19 @@ This adapts the autoresearcher-nz architectural pattern (explorer loop, cross-po
 
 The crisis is characterised by **regime changes** — discrete events (ceasefire, major strike, Hormuz closure) that fundamentally reshape the probability of everything downstream. System dynamics assumes smooth continuous flows, which is wrong for war modelling. Mesa ABM is designed for emergent behaviour from thousands of agents; we have ~15 actors and ~30 systems, making it overkill.
 
-A Bayesian network naturally handles conditional dependencies: P(NZ rationing | Hormuz closed, no ceasefire) differs from P(NZ rationing | Hormuz closed, ceasefire day 45). Each turning point updates the posterior distribution over all downstream nodes. This is the established methodology for catastrophe modelling in reinsurance (RMS, AIR Worldwide), applied here to geopolitical crisis.
+A causal network with conditional sampling naturally handles these dependencies: P(NZ rationing | Hormuz closed, no ceasefire) differs from P(NZ rationing | Hormuz closed, ceasefire day 45). Each turning point updates the probability distribution over all downstream nodes. This is the established methodology for catastrophe modelling in reinsurance (RMS, AIR Worldwide), applied here to geopolitical crisis.
+
+### Why forward Monte Carlo, not pgmpy
+
+The model is fundamentally temporal: day N depends on day N-1, with feedback loops (demand destruction moderates oil prices, grid damage slows repair). Standard Bayesian network libraries (pgmpy, pyAgrum) implement static DAG inference — they cannot handle cycles or temporal state transitions natively.
+
+What we actually need is simpler: each node is a Python callable that takes its parents' values from the previous day and returns a sample from a conditional distribution. A forward Monte Carlo loop steps through 180 days, sampling all nodes at each step. This is ~200 lines of numpy/scipy, faster than any library, and fully transparent.
+
+The causal network structure (which nodes depend on which) still follows Bayesian network principles. We just implement inference as forward sampling rather than using a library's built-in algorithms.
+
+### Within-day DAG vs cross-day feedback
+
+The within-day causal graph must be a DAG (directed acyclic graph) — no cycles within a single time step. Feedback loops operate exclusively across days: oil price at day N affects demand destruction at day N+1, which affects oil price at day N+2. This is a standard approach in dynamic Bayesian networks (DBN), but we implement it as a simple loop rather than using DBN machinery.
 
 ### Why country/system-level, not infrastructure-level
 
@@ -36,20 +48,21 @@ Raw satellite/OSINT signals do not equal ground truth:
 - IODA internet "recovery" in Iran includes VPN/satellite workarounds — civilian infrastructure connectivity is near zero
 - Nightlight drop of -78% in Tehran is consistent with near-total grid failure
 
-The world state snapshot carries both `raw_signal` and `estimated_actual` fields with documented reasoning. This transparency is essential for publication quality.
+The world state snapshot carries `raw_signal` and an `estimated_actual` distribution (not a point estimate) with documented reasoning. Where the translation involves analyst judgment (e.g., "Hormuz is effectively closed"), the estimate is a distribution with a confidence interval, not a single number. This lets the simulation sample from the uncertainty rather than treating a guess as a measurement. This transparency is essential for publication quality.
 
 ### Caveats
 
 - **No historical precedent** for full Hormuz closure. The 2019 Abqaiq attack (~5% of global supply offline for 2 weeks) is the closest analogue. All model outputs extrapolate beyond observed data.
 - **NZ is a food exporter.** Food price impact is nuanced: dairy/meat export revenue increases while import costs rise. Modelled as terms-of-trade, not a simple price index.
 - **Feedback loops exist.** Oil price spike → demand destruction → price moderates. Hormuz closure → Cape rerouting → Cape congestion → further delays. The network models bidirectional effects where each day's node states depend on the previous day's.
+- **CPDs are expert elicitation, not empirical estimation.** The conditional probability distributions are analyst-specified, not learned from historical data (because there is no historical data for this scenario). The explorer loop's role is to characterise sensitivity to these elicited assumptions rather than to "find the right answer." The methodology document must be explicit about this distinction.
 
 ## Architecture
 
 ```
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐    ┌──────────────────┐
-│  Data Ingest     │───▸│  Bayesian Network │───▸│  Explorer Loop   │───▸│  Synthesis        │
-│  (market, OSINT) │    │  + MC Sampling    │    │  (LLM-guided)   │    │  (Opus analysis)  │
+│  Data Ingest     │───▸│  Forward MC       │───▸│  Explorer Loop   │───▸│  Synthesis        │
+│  (market, OSINT) │    │  Simulator        │    │  (LLM-guided)   │    │  (Opus analysis)  │
 └─────────────────┘    └──────────────────┘    └─────────────────┘    └──────────────────┘
 ```
 
@@ -87,7 +100,8 @@ Fields that can't be populated are `null`. The simulation widens uncertainty ban
         # ...
     },
     "maritime": {
-        "hormuz_vessel_pct_change": {"raw_signal": -55.0, "estimated_actual": -95.0,
+        "hormuz_vessel_pct_change": {"raw_signal": -55.0,
+            "estimated_actual": {"estimate": -95.0, "ci_90": [-100, -80], "basis": "analyst_judgment"},
             "source": "satint_sar", "note": "Raw SAR detects presence not transit. Strait effectively closed to commercial shipping."},
         # ...
     },
@@ -97,7 +111,8 @@ Fields that can't be populated are `null`. The simulation widens uncertainty ban
         # ...
     },
     "grid": {
-        "iran_internet": {"raw_signal": -5.2, "estimated_actual": -99.0,
+        "iran_internet": {"raw_signal": -5.2,
+            "estimated_actual": {"estimate": -99.0, "ci_90": [-100, -90], "basis": "analyst_judgment"},
             "source": "satint_ioda", "note": "IODA recovery is VPN/satellite. Civilian infrastructure near zero."},
         "tehran_nightlight_pct": {"raw_signal": -78.0, "estimated_actual": -78.0, "source": "satint"},
         # ...
@@ -109,7 +124,7 @@ Fields that can't be populated are `null`. The simulation widens uncertainty ban
 }
 ```
 
-### Layer 2: Bayesian Network + Monte Carlo Simulation
+### Layer 2: Forward Monte Carlo Simulator
 
 **Network structure — three layers of nodes:**
 
@@ -177,18 +192,38 @@ Feedback is handled by making each day-step read previous day's state. Node valu
 When new satint/market data arrives, yesterday's posterior becomes today's prior. Example: MBIE publishes new stock data showing faster depletion → P(nz_days_to_rationing) shifts toward shorter timeframes → propagates to all downstream NZ impact nodes.
 
 **Calibration anchors** (the network must reproduce these observed values when inputs match current reality):
+
+Static anchors (current state):
 - Hormuz ~95% closed → model outputs near-total commercial transit cessation
 - Tehran nightlights -78% → model outputs severe Iranian grid failure
 - NZ petrol $3.02/L, stations running dry → model outputs matching fuel stress
 - MBIE 52 days total cover (as of Mar 8) → model stock depletion matches
 
+Dynamic anchors (rate of change — constrains trajectory parameters):
+- Hormuz SAR: +114% on Feb 28 → -55% by Mar 9 (12-day transit collapse). Model must reproduce this timeline.
+- Tehran nightlights: -12% on Mar 5 → -78% on Mar 8 (3-day grid collapse). Model must reproduce this rate.
+- Iran internet: -66% on Feb 28 → partial IODA recovery by Mar 3 (5-day VPN workaround). Model should distinguish grid recovery from VPN.
+- NZ fuel prices: baseline ~$2.50 → $3.02 by Mar 15 (17 days, ~20% rise). Model must reproduce this pass-through speed.
+
+**Observed vs projected boundary:**
+
+The simulation runs from day 0 (war start, Feb 28) through day 180 (Aug 27). Days 0 through today have observations; future days do not.
+
+- **Past days (0 to today):** Clamp all available observations as evidence. Sample only unobserved nodes. Model is constrained by reality.
+- **Projection boundary (today):** Uncertainty widens discontinuously. The last observation for each node becomes the initial condition for forward sampling.
+- **Future days (today + 1 onward):** Sample all nodes. Variance grows with sqrt(days_ahead) — reflecting increasing uncertainty over time. No observations to clamp.
+
+This transition must be visible in the output: confidence bands narrow where we have data and widen into the future. The daily_briefing output explicitly marks which metrics are "observed" vs "projected."
+
 **Computation budget:**
 - Quick run (1,000 samples × 180 days): ~3 seconds
 - Full scenario (5,000 samples × 180 days): ~15 seconds
-- Explorer experiment (propose + run + compare): ~20 seconds
-- Full fleet (7 agents × 60 experiments): ~2.5 hours
+- Explorer experiment (propose + simulate + compare): ~20-30 seconds (LLM call 5-15s + simulation 15s)
+- Full fleet (7 agents × 60 experiments): ~3-5 hours (LLM-latency-dominated, not compute; requires 7 concurrent Anthropic API connections)
 
-**Library:** pgmpy — mature Python Bayesian network library supporting discrete/continuous nodes, exact and approximate inference, parameter and structure learning.
+**Implementation:** Hand-rolled forward sampler using numpy/scipy. Each node is a Python callable with a `sample(parents: dict, rng: np.random.Generator) -> float` method. The causal graph structure follows Bayesian network principles (within-day DAG, cross-day feedback), but inference is pure forward sampling — no library needed. This is faster, more transparent, and avoids fighting framework assumptions.
+
+**Reproducibility:** Every MC run uses a deterministic seed (recorded in the experiment log) so any published result can be exactly reproduced.
 
 ### Layer 3: Explorer Loop
 
@@ -211,7 +246,7 @@ Seven agents, each probing a different dimension of uncertainty. Sonnet 4 propos
 A proposed CPD change is accepted if it meets ANY of:
 - **Sensitivity discovery**: ≤10% parameter shift → ≥15% shift in median NZ rationing date
 - **Tail exploration**: produces outcome in 5th or 95th percentile of previously observed runs
-- **Novelty**: CPD configuration is far from previously explored configs (KL-divergence)
+- **Novelty**: CPD configuration is far from previously explored configs (KL-divergence) AND the output distribution differs meaningfully from existing runs (prevents "novel but uninformative" experiments)
 - **Contradiction**: produces outcome contradicting another accepted scenario with similar inputs
 
 Rejected if:
@@ -231,9 +266,11 @@ Rejected if:
     "agent_id": "escalation_explorer",
     "timestamp": "2026-03-16T10:32:00Z",
     "hypothesis": "If ceasefire probability increases 3% per week, median war duration drops from 95 to 62 days, shifting NZ rationing from 72% to 41%",
+    "seed": 20260316001,
     "cpd_changes": [
         {"node": "ceasefire_probability", "param": "weekly_increase", "old": 0.01, "new": 0.03}
     ],
+    "structural_changes": [],
     "output_distribution": {
         "nz_days_to_rationing": {"p5": 12, "p25": 28, "p50": 45, "p75": 89, "p95": null},
         "brent_peak_usd": {"p5": 118, "p25": 132, "p50": 148, "p75": 167, "p95": 203}
@@ -295,12 +332,12 @@ autoresearcher-irancrisis/
 │   ├── satint_client.py          # Reads satint pipeline docs/data/*.json
 │   └── assemble_snapshot.py      # Merge → data/snapshots/YYYY-MM-DD.json
 │
-├── network/                      # Bayesian network
-│   ├── structure.py              # Nodes, edges, topology
-│   ├── cpds.py                   # Conditional probability distributions
-│   ├── calibration.py            # Fit CPDs to observed data
-│   ├── inference.py              # MC sampling, Bayesian updating
-│   └── validate.py               # Hard constraints on CPD values
+├── network/                      # Causal network + forward MC sampler
+│   ├── structure.py              # Node definitions, edges, within-day DAG topology
+│   ├── nodes.py                  # Node callables: sample(parents, rng) → float
+│   ├── calibration.py            # Fit node distributions to observed data + dynamic anchors
+│   ├── inference.py              # Forward MC sampling loop (day-by-day, 5000 paths)
+│   └── validate.py               # Hard constraints on node parameter values
 │
 ├── explorer/                     # LLM-guided search
 │   ├── loop.py                   # Propose → simulate → accept/reject
@@ -341,7 +378,6 @@ autoresearcher-irancrisis/
 **Dependencies:**
 
 ```
-pgmpy>=0.1.25
 yfinance>=0.2.36
 fredapi>=0.5.1
 anthropic>=0.49.0
@@ -352,6 +388,8 @@ requests>=2.31
 python-dotenv>=1.0
 filelock>=3.13
 ```
+
+No pgmpy or Mesa dependency. The forward MC sampler is ~200 lines of numpy/scipy.
 
 ## MVP Scope
 
