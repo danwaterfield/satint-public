@@ -21,6 +21,7 @@ from django.db.models import Avg, Count, Max, Min, Sum
 
 from pipeline.models import (
     AreaOfInterest,
+    CommercialTransit,
     CompoundRiskIndicator,
     FlightActivity,
     FuelPriceObservation,
@@ -34,6 +35,7 @@ from pipeline.models import (
     SARVesselDetection,
     ThermalAnomaly,
     ThermalSignature,
+    WarRiskPremium,
 )
 
 
@@ -72,6 +74,8 @@ class Command(BaseCommand):
         self._export_nz(out_dir)
         self._export_flights(out_dir)
         self._export_fuel_security(out_dir)
+        self._export_commercial_transits(out_dir)
+        self._export_war_risk(out_dir)
 
         self.stdout.write(self.style.SUCCESS(f"Export complete → {out_dir}/"))
 
@@ -147,21 +151,34 @@ class Command(BaseCommand):
                     f"consistent with widespread power grid failure"
                 )
 
-        # Hormuz vessel traffic
-        latest_sar = (
-            SARVesselDetection.objects.filter(
-                chokepoint__name__icontains="Hormuz",
-                pct_change__lt=-20,
-            )
+        # Hormuz commercial traffic (prefer verified OSINT over raw SAR)
+        latest_commercial = (
+            CommercialTransit.objects.filter(chokepoint="hormuz")
             .order_by("-date")
             .first()
         )
-        if latest_sar:
-            remaining = 100 + latest_sar.pct_change
+        if latest_commercial and latest_commercial.pct_change is not None:
             brief_parts.append(
-                f"Strait of Hormuz vessel traffic has fallen to "
-                f"{remaining:.0f}% of normal"
+                f"Strait of Hormuz commercial shipping at "
+                f"{latest_commercial.crossings} vessels/day "
+                f"({latest_commercial.pct_change:+.0f}% vs pre-war baseline of {latest_commercial.baseline_crossings:.0f})"
             )
+        else:
+            latest_sar = (
+                SARVesselDetection.objects.filter(
+                    chokepoint__name__icontains="Hormuz",
+                    is_military=False,
+                    pct_change__lt=-20,
+                )
+                .order_by("-date")
+                .first()
+            )
+            if latest_sar:
+                remaining = 100 + latest_sar.pct_change
+                brief_parts.append(
+                    f"Strait of Hormuz vessel traffic has fallen to "
+                    f"{remaining:.0f}% of normal"
+                )
 
         # Damaged facilities
         damaged = sorted(set(
@@ -459,7 +476,8 @@ class Command(BaseCommand):
             .select_related("chokepoint")
             .order_by("chokepoint__name", "date")
             .values("chokepoint__name", "date", "vessel_count",
-                    "baseline_count", "pct_change", "scene_coverage", "mean_scr_db")
+                    "baseline_count", "pct_change", "scene_coverage", "mean_scr_db",
+                    "is_military", "notes")
         )
 
         result = {}
@@ -472,7 +490,7 @@ class Command(BaseCommand):
                 round(d["vessel_count"] / cov, 1)
                 if cov and cov > 0 else None
             )
-            result[name].append({
+            entry = {
                 "date": str(d["date"]),
                 "vessel_count": d["vessel_count"],
                 "normalised_count": normalised,
@@ -480,7 +498,11 @@ class Command(BaseCommand):
                 "pct_change": round(d["pct_change"], 1) if d["pct_change"] is not None else None,
                 "scene_coverage": round(d["scene_coverage"], 2),
                 "mean_scr_db": round(d["mean_scr_db"], 1),
-            })
+            }
+            if d.get("is_military"):
+                entry["is_military"] = True
+                entry["notes"] = d.get("notes", "")
+            result[name].append(entry)
 
         self._write(os.path.join(out_dir, "sar.json"), result)
 
@@ -792,3 +814,56 @@ class Command(BaseCommand):
         }
 
         self._write(os.path.join(out_dir, "fuel_security.json"), result)
+
+    def _export_commercial_transits(self, out_dir):
+        """Commercial vessel transit counts at chokepoints (OSINT-verified AIS data)."""
+        from collections import defaultdict
+
+        transits = (
+            CommercialTransit.objects.all()
+            .order_by("chokepoint", "date")
+            .values("chokepoint", "date", "crossings", "inbound", "outbound",
+                    "seven_day_avg", "baseline_crossings", "pct_change", "source")
+        )
+
+        chokepoints = defaultdict(list)
+        for t in transits:
+            chokepoints[t["chokepoint"]].append({
+                "date": str(t["date"]),
+                "crossings": t["crossings"],
+                "inbound": t["inbound"],
+                "outbound": t["outbound"],
+                "seven_day_avg": round(t["seven_day_avg"], 1) if t["seven_day_avg"] is not None else None,
+                "baseline": t["baseline_crossings"],
+                "pct_change": round(t["pct_change"], 1) if t["pct_change"] is not None else None,
+                "source": t["source"],
+            })
+
+        self._write(os.path.join(out_dir, "commercial_transits.json"), dict(sorted(chokepoints.items())))
+
+    def _export_war_risk(self, out_dir):
+        """War risk insurance premium time series."""
+        premiums = (
+            WarRiskPremium.objects.all()
+            .order_by("date")
+            .values("date", "chokepoint", "premium_pct_low", "premium_pct_high",
+                    "premium_pct_mid", "baseline_pct", "pct_change", "vlcc_cost_usd",
+                    "source", "notes")
+        )
+
+        result = [
+            {
+                "date": str(p["date"]),
+                "chokepoint": p["chokepoint"],
+                "premium_low": round(p["premium_pct_low"], 4),
+                "premium_high": round(p["premium_pct_high"], 4),
+                "premium_mid": round(p["premium_pct_mid"], 4),
+                "baseline": round(p["baseline_pct"], 4),
+                "multiple_vs_baseline": round(p["premium_pct_mid"] / p["baseline_pct"], 1) if p["baseline_pct"] else None,
+                "vlcc_cost_usd": p["vlcc_cost_usd"],
+                "source": p["source"],
+            }
+            for p in premiums
+        ]
+
+        self._write(os.path.join(out_dir, "war_risk_insurance.json"), result)

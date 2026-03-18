@@ -21,6 +21,7 @@ from pipeline.clients.sentinel2 import Sentinel2Client, count_bright_objects
 from pipeline.clients.dnb_swath import fetch_dnb_for_aoi
 from pipeline.models import (
     AreaOfInterest,
+    CommercialTransit,
     CompoundRiskIndicator,
     FlightActivity,
     GDELTEventCount,
@@ -587,35 +588,48 @@ def calculate_compound_indicators(self):
     today = date.today()
 
     # Pre-fetch chokepoint pct_changes for trade flow score
-    # Prefer SAR vessel detections (AIS-independent); fall back to GFW AIS data
-    # Only use Gulf chokepoint SAR data for trade flow (exclude NZ marinas/approaches)
-    sar_changes = list(
-        SARVesselDetection.objects.filter(
+    # Priority: 1) CommercialTransit (OSINT-verified AIS counts)
+    #           2) SAR (non-military only)
+    #           3) GFW AIS (VesselTransit)
+    commercial_changes = list(
+        CommercialTransit.objects.filter(
             date__gte=today - timedelta(days=7),
-            chokepoint__category="chokepoint",
+            chokepoint="hormuz",
         )
         .exclude(pct_change=None)
         .values_list("pct_change", flat=True)
     )
-    if sar_changes:
-        avg_chokepoint_change = sum(sar_changes) / len(sar_changes)
+    if commercial_changes:
+        avg_chokepoint_change = sum(commercial_changes) / len(commercial_changes)
     else:
-        hormuz_change = (
-            VesselTransit.objects.filter(
-                chokepoint__name__icontains="Hormuz", date=today
+        sar_changes = list(
+            SARVesselDetection.objects.filter(
+                date__gte=today - timedelta(days=7),
+                chokepoint__category="chokepoint",
+                is_military=False,
             )
             .exclude(pct_change=None)
             .values_list("pct_change", flat=True)
         )
-        mandeb_change = (
-            VesselTransit.objects.filter(
-                chokepoint__name__icontains="Mandeb", date=today
+        if sar_changes:
+            avg_chokepoint_change = sum(sar_changes) / len(sar_changes)
+        else:
+            hormuz_change = (
+                VesselTransit.objects.filter(
+                    chokepoint__name__icontains="Hormuz", date=today
+                )
+                .exclude(pct_change=None)
+                .values_list("pct_change", flat=True)
             )
-            .exclude(pct_change=None)
-            .values_list("pct_change", flat=True)
-        )
-        all_ais = list(hormuz_change) + list(mandeb_change)
-        avg_chokepoint_change = sum(all_ais) / len(all_ais) if all_ais else 0
+            mandeb_change = (
+                VesselTransit.objects.filter(
+                    chokepoint__name__icontains="Mandeb", date=today
+                )
+                .exclude(pct_change=None)
+                .values_list("pct_change", flat=True)
+            )
+            all_ais = list(hormuz_change) + list(mandeb_change)
+            avg_chokepoint_change = sum(all_ais) / len(all_ais) if all_ais else 0
 
     # Exclude NZ cities — they have their own migration pressure indicator
     city_aois = AreaOfInterest.objects.filter(category="city").exclude(country="New Zealand")
@@ -1802,16 +1816,28 @@ def calculate_enhanced_compound_risk(self):
     today = date.today()
 
     # Pre-fetch shared scores
-    # Trade flow from SAR (chokepoints only)
-    sar_changes = list(
-        SARVesselDetection.objects.filter(
+    # Trade flow: prefer CommercialTransit (OSINT-verified), fall back to SAR (non-military)
+    commercial_changes = list(
+        CommercialTransit.objects.filter(
             date__gte=today - timedelta(days=7),
-            chokepoint__category="chokepoint",
+            chokepoint="hormuz",
         )
         .exclude(pct_change=None)
         .values_list("pct_change", flat=True)
     )
-    avg_chokepoint_change = sum(sar_changes) / len(sar_changes) if sar_changes else 0
+    if commercial_changes:
+        avg_chokepoint_change = sum(commercial_changes) / len(commercial_changes)
+    else:
+        sar_changes = list(
+            SARVesselDetection.objects.filter(
+                date__gte=today - timedelta(days=7),
+                chokepoint__category="chokepoint",
+                is_military=False,
+            )
+            .exclude(pct_change=None)
+            .values_list("pct_change", flat=True)
+        )
+        avg_chokepoint_change = sum(sar_changes) / len(sar_changes) if sar_changes else 0
 
     city_aois = AreaOfInterest.objects.filter(category="city").exclude(country="New Zealand")
     cutoff_48h = timezone.now() - timedelta(hours=48)
@@ -2639,3 +2665,46 @@ def fetch_mbie_fuel_prices(self):
 
     logger.info("MBIE fuel prices: %d new, %d total records", saved, len(records))
     return {"status": "ok", "new_records": saved, "total_parsed": len(records)}
+
+
+@shared_task(bind=True, max_retries=2)
+def fetch_commercial_transits(self):
+    """
+    Fetch commercial vessel transit counts from Windward Maritime Intelligence Daily.
+    Windward publishes daily blog posts with AIS-confirmed crossing counts
+    for Hormuz, Bab al-Mandeb, Suez, and Cape of Good Hope.
+    """
+    from pipeline.clients.windward import fetch_windward_daily
+
+    logger.info("Fetching Windward commercial transit data")
+    # Try yesterday (post usually covers prior day's crossings)
+    target = date.today() - timedelta(days=1)
+
+    data = fetch_windward_daily(target)
+    if not data:
+        logger.warning("No Windward data for %s", target)
+        return {"date": str(target), "processed": 0}
+
+    saved = 0
+    for chokepoint, values in data.items():
+        obj, created = CommercialTransit.objects.update_or_create(
+            chokepoint=chokepoint,
+            date=target,
+            source="windward",
+            defaults={
+                "crossings": values["crossings"],
+                "inbound": values.get("inbound"),
+                "outbound": values.get("outbound"),
+                "seven_day_avg": values.get("seven_day_avg"),
+                "baseline_crossings": values["baseline"],
+                "notes": "Auto-scraped from Windward Maritime Intelligence Daily",
+            },
+        )
+        if created:
+            saved += 1
+        logger.info(
+            "CommercialTransit %s %s: %d crossings (pct=%s%%)",
+            chokepoint, target, values["crossings"], obj.pct_change,
+        )
+
+    return {"date": str(target), "processed": saved}

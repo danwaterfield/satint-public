@@ -172,6 +172,14 @@ class SARVesselDetection(models.Model):
         default=0, help_text="Mean ship-to-clutter ratio of detections (dB)"
     )
     polarization = models.CharField(max_length=5, default="VV")
+    is_military = models.BooleanField(
+        default=False,
+        help_text="True if detection is predominantly military vessels (excluded from trade-flow scoring)",
+    )
+    notes = models.TextField(
+        blank=True, default="",
+        help_text="Analyst notes — e.g. context from OSINT, naval tracker cross-reference",
+    )
 
     class Meta:
         unique_together = ["chokepoint", "date"]
@@ -702,3 +710,107 @@ class GroundwaterAnomaly(models.Model):
 
     def __str__(self):
         return f"{self.region_name} — GRACE {self.month} ({self.mean_ewt_cm:+.1f} cm)"
+
+
+class CommercialTransit(models.Model):
+    """
+    Daily commercial vessel transit counts at chokepoints, sourced from
+    Windward Maritime Intelligence Daily reports and other OSINT.
+    Distinct from SAR detections — this is confirmed AIS-based commercial traffic only.
+    """
+
+    CHOKEPOINT_CHOICES = [
+        ("hormuz", "Strait of Hormuz"),
+        ("bab_al_mandeb", "Bab al-Mandeb"),
+        ("suez", "Suez Canal"),
+        ("cape", "Cape of Good Hope"),
+        ("malacca", "Malacca Strait"),
+    ]
+
+    chokepoint = models.CharField(max_length=20, choices=CHOKEPOINT_CHOICES)
+    date = models.DateField(help_text="Date of observation (crossings reported for this day)")
+    crossings = models.IntegerField(help_text="Total confirmed commercial vessel crossings")
+    inbound = models.IntegerField(null=True, blank=True)
+    outbound = models.IntegerField(null=True, blank=True)
+    seven_day_avg = models.FloatField(
+        null=True, blank=True, help_text="7-day rolling average of crossings"
+    )
+    baseline_crossings = models.FloatField(
+        default=138, help_text="Pre-war daily average (Hormuz=138, adjustable per chokepoint)"
+    )
+    pct_change = models.FloatField(
+        null=True, blank=True, help_text="Percentage change vs pre-war baseline"
+    )
+    source = models.CharField(
+        max_length=100, default="windward",
+        help_text="Data source (windward, uani, bloomberg, manual)",
+    )
+    notes = models.TextField(blank=True, default="")
+
+    class Meta:
+        unique_together = ["chokepoint", "date", "source"]
+        ordering = ["-date"]
+
+    def save(self, *args, **kwargs):
+        if self.baseline_crossings and self.baseline_crossings > 0:
+            self.pct_change = round(
+                (self.crossings - self.baseline_crossings) / self.baseline_crossings * 100, 1
+            )
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.get_chokepoint_display()} — {self.date} ({self.crossings} crossings)"
+
+
+class WarRiskPremium(models.Model):
+    """
+    War risk insurance premium rates for maritime chokepoints.
+    Key economic indicator — when premiums exceed ~1% hull value,
+    commercial transit becomes economically unviable.
+    """
+
+    date = models.DateField(help_text="Date of rate observation")
+    chokepoint = models.CharField(max_length=20, default="hormuz")
+    premium_pct_low = models.FloatField(
+        help_text="Low end of quoted war risk premium (% of hull value per transit)"
+    )
+    premium_pct_high = models.FloatField(
+        help_text="High end of quoted war risk premium (% of hull value per transit)"
+    )
+    premium_pct_mid = models.FloatField(
+        help_text="Midpoint estimate of premium range"
+    )
+    baseline_pct = models.FloatField(
+        default=0.035, help_text="Pre-war baseline premium (% hull value) — ~0.02-0.05%"
+    )
+    pct_change = models.FloatField(
+        null=True, blank=True, help_text="Multiple vs baseline (e.g. 10x = 1000%)"
+    )
+    vlcc_cost_usd = models.IntegerField(
+        null=True, blank=True,
+        help_text="Estimated cost for a $120M VLCC transit at mid rate",
+    )
+    source = models.CharField(max_length=200, default="", help_text="Source attribution")
+    notes = models.TextField(blank=True, default="")
+
+    class Meta:
+        unique_together = ["chokepoint", "date"]
+        ordering = ["-date"]
+
+    def save(self, *args, **kwargs):
+        self.premium_pct_mid = round(
+            (self.premium_pct_low + self.premium_pct_high) / 2, 4
+        )
+        if self.baseline_pct and self.baseline_pct > 0:
+            self.pct_change = round(
+                (self.premium_pct_mid - self.baseline_pct) / self.baseline_pct * 100, 1
+            )
+        # Cost for a $120M VLCC
+        self.vlcc_cost_usd = int(120_000_000 * self.premium_pct_mid / 100)
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return (
+            f"Hormuz WRP {self.date}: {self.premium_pct_low:.3f}–{self.premium_pct_high:.3f}% "
+            f"(VLCC: ${self.vlcc_cost_usd:,})"
+        )
