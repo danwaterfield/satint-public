@@ -304,6 +304,18 @@ _DNB_CITY_BOXES = {
     # NZ migration targets — larger boxes due to coastal cloud fill patterns
     "Auckland":     {"min_lat": -37.3, "max_lat": -36.4, "min_lon": 174.3, "max_lon": 175.2},
     "Queenstown":   {"min_lat": -45.2, "max_lat": -44.8, "min_lon": 168.4, "max_lon": 168.9},
+    # Cascade monitoring: India, Pakistan, Australia
+    "Delhi":        {"min_lat": 28.2, "max_lat": 29.2, "min_lon": 76.6, "max_lon": 77.6},
+    "Chennai":      {"min_lat": 12.6, "max_lat": 13.5, "min_lon": 79.8, "max_lon": 80.7},
+    "Kolkata":      {"min_lat": 22.1, "max_lat": 23.1, "min_lon": 87.9, "max_lon": 88.9},
+    "Lahore":       {"min_lat": 31.1, "max_lat": 32.0, "min_lon": 73.9, "max_lon": 74.9},
+    "Islamabad":    {"min_lat": 33.2, "max_lat": 34.2, "min_lon": 72.5, "max_lon": 73.6},
+    "Sydney":       {"min_lat": -34.3, "max_lat": -33.4, "min_lon": 150.6, "max_lon": 151.7},
+    "Melbourne":    {"min_lat": -38.3, "max_lat": -37.3, "min_lon": 144.4, "max_lon": 145.5},
+    "Perth":        {"min_lat": -32.4, "max_lat": -31.4, "min_lon": 115.3, "max_lon": 116.4},
+    "Dhaka":        {"min_lat": 23.3, "max_lat": 24.3, "min_lon": 89.9, "max_lon": 90.9},
+    "Colombo":      {"min_lat": 6.4,  "max_lat": 7.4,  "min_lon": 79.4, "max_lon": 80.3},
+    "Cairo":        {"min_lat": 29.6, "max_lat": 30.5, "min_lon": 30.7, "max_lon": 31.8},
 }
 
 _DNB_DOWNLOAD_DIR = "/tmp/satint_dnb"
@@ -1271,6 +1283,13 @@ _NO2_CITY_BOXES = {
     "Doha":        {"min_lat": 24.8, "max_lat": 25.7, "min_lon": 51.0, "max_lon": 51.8},
     "Abu Dhabi":   {"min_lat": 24.0, "max_lat": 25.0, "min_lon": 53.8, "max_lon": 55.0},
     "Manama":      {"min_lat": 25.9, "max_lat": 26.5, "min_lon": 50.2, "max_lon": 50.9},
+    # Cascade monitoring
+    "Delhi":       {"min_lat": 28.0, "max_lat": 29.5, "min_lon": 76.5, "max_lon": 78.0},
+    "Mumbai":      {"min_lat": 18.5, "max_lat": 20.0, "min_lon": 72.0, "max_lon": 73.5},
+    "Karachi":     {"min_lat": 24.3, "max_lat": 25.5, "min_lon": 66.5, "max_lon": 68.0},
+    "Lahore":      {"min_lat": 31.0, "max_lat": 32.5, "min_lon": 73.5, "max_lon": 75.0},
+    "Cairo":       {"min_lat": 29.5, "max_lat": 31.0, "min_lon": 30.5, "max_lon": 32.0},
+    "Sydney":      {"min_lat": -34.5, "max_lat": -33.0, "min_lon": 150.5, "max_lon": 152.0},
 }
 
 
@@ -1352,6 +1371,8 @@ def fetch_tropomi_no2(self):
 _MONITORED_COUNTRIES = [
     "Iran", "United Arab Emirates", "Saudi Arabia", "Qatar",
     "Kuwait", "Iraq", "Bahrain",
+    # Cascade monitoring
+    "India", "Pakistan", "Australia", "Bangladesh", "Sri Lanka", "Egypt",
 ]
 
 
@@ -1424,6 +1445,16 @@ _GULF_AIRPORTS = {
     "Riyadh King Khalid": {"icao": "OERK", "country": "Saudi Arabia"},
     "Isfahan": {"icao": "OIFM", "country": "Iran"},
     "Basra": {"icao": "ORMM", "country": "Iraq"},
+    # Cascade monitoring
+    "Delhi Indira Gandhi": {"icao": "VIDP", "country": "India"},
+    "Mumbai Chhatrapati Shivaji": {"icao": "VABB", "country": "India"},
+    "Karachi Jinnah": {"icao": "OPKC", "country": "Pakistan"},
+    "Lahore Allama Iqbal": {"icao": "OPLA", "country": "Pakistan"},
+    "Sydney Kingsford Smith": {"icao": "YSSY", "country": "Australia"},
+    "Melbourne Tullamarine": {"icao": "YMML", "country": "Australia"},
+    "Cairo International": {"icao": "HECA", "country": "Egypt"},
+    "Colombo Bandaranaike": {"icao": "VCBI", "country": "Sri Lanka"},
+    "Dhaka Hazrat Shahjalal": {"icao": "VGHS", "country": "Bangladesh"},
 }
 
 _NZ_AIRPORTS_ADSB = {
@@ -2321,6 +2352,7 @@ def calculate_fuel_security_indicator(self):
     supply chain, demand signals, and GDELT narrative.
     """
     from pipeline.models import (
+        CommercialTransit,
         FuelPriceObservation,
         FuelStockLevel,
         NZFuelSecurityIndicator,
@@ -2330,20 +2362,22 @@ def calculate_fuel_security_indicator(self):
     today = date.today()
 
     # --- 1. Hormuz disruption score (30%) ---
-    # Recency-weighted: most recent SAR reading counts most (weights: 0.6, 0.25, 0.15)
-    hormuz_sar = list(
-        SARVesselDetection.objects.filter(
-            chokepoint__name__icontains="Hormuz",
+    # Use commercial transit data (AIS-confirmed traffic), NOT SAR vessel counts.
+    # SAR counts include military vessels, inflating post-war numbers and masking
+    # the commercial shipping collapse.
+    hormuz_commercial = list(
+        CommercialTransit.objects.filter(
+            chokepoint="hormuz",
             date__gte=today - timedelta(days=14),
         )
         .exclude(pct_change=None)
         .order_by("-date")
         .values_list("pct_change", flat=True)[:3]
     )
-    if hormuz_sar:
-        recency_weights = [0.6, 0.25, 0.15][:len(hormuz_sar)]
+    if hormuz_commercial:
+        recency_weights = [0.6, 0.25, 0.15][:len(hormuz_commercial)]
         w_total = sum(recency_weights)
-        avg_hormuz_pct = sum(v * w for v, w in zip(hormuz_sar, recency_weights)) / w_total
+        avg_hormuz_pct = sum(v * w for v, w in zip(hormuz_commercial, recency_weights)) / w_total
     else:
         avg_hormuz_pct = 0
     # Negative pct_change = disruption
@@ -2382,7 +2416,7 @@ def calculate_fuel_security_indicator(self):
             total_days = onshore.days_of_supply + (on_water.days_of_supply if on_water else 0)
 
             # Depletion model — calibrated against MBIE actuals (Mar 15 2026)
-            hormuz_disruption_frac = max(0, -avg_hormuz_pct / 100) if hormuz_sar else 0
+            hormuz_disruption_frac = max(0, -avg_hormuz_pct / 100) if hormuz_commercial else 0
             nz_hormuz_dependency = 0.40
             resupply_reduction = hormuz_disruption_frac * nz_hormuz_dependency
 
