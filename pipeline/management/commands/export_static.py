@@ -805,9 +805,15 @@ class Command(BaseCommand):
             },
         }
 
+        # Scenario projections (extracted from depletion_projections if present)
+        scenarios_data = None
+        if latest_indicator and latest_indicator.depletion_projections:
+            scenarios_data = latest_indicator.depletion_projections.get("scenarios")
+
         result = {
             "indicator": indicator_data,
             "series": series_data,
+            "scenarios": scenarios_data,
             "stocks": dict(stock_data),
             "prices": dict(price_data),
             "methodology": methodology,

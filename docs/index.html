@@ -304,10 +304,16 @@
     /* Charts: reduce height */
     #fuel-price-chart { height: 260px !important; }
     #fuel-hormuz-chart { height: 220px !important; }
+    #upstream-price-chart { height: 260px !important; }
+    #upstream-fx-chart { height: 220px !important; }
+    #upstream-price-chart, #upstream-fx-chart { min-width: 0; }
 
     /* Cascade table: horizontal scroll */
     .cascade-table { font-size: 11px; min-width: 580px; }
     .cascade-table th, .cascade-table td { padding: 5px 6px; }
+
+    /* Upstream indicators: stack on mobile */
+    #upstream-price-chart, #upstream-fx-chart { grid-column: 1 / -1; }
 
     /* Effect cards: single column */
     .effect-cards { grid-template-columns: 1fr; }
@@ -871,10 +877,22 @@
   <div class="card">
     <div class="section-header">
       <span class="section-title">NZ Retail Fuel Prices</span>
-      <span class="section-meta">MBIE weekly monitoring &bull; NZD per litre &bull; <span class="tip" data-tip="Prices include GST and excise duty. Import cost = refinery gate price in NZD. The gap between retail and import cost reflects distributor margins, taxes, and transport.">adjusted retail price</span></span>
+      <span class="section-meta">MBIE weekly + <a href="https://www.gaspy.nz/stats.html" target="_blank" rel="noopener">Gaspy</a> daily &bull; NZD per litre &bull; <span class="tip" data-tip="Prices include GST and excise duty. MBIE data is weekly; Gaspy provides daily NZ-average retail prices from 2,400+ stations. Import cost = refinery gate price in NZD.">adjusted retail price</span></span>
     </div>
     <div id="fuel-price-chart" style="height:320px;"></div>
     <p class="empty-state" id="fuel-price-empty" style="display:none">No fuel price data available. Use <code>python manage.py ingest_fuel_prices</code> to load MBIE CSV.</p>
+  </div>
+
+  <!-- Section 4b: Upstream Market Indicators -->
+  <div class="card">
+    <div class="section-header">
+      <span class="section-title tip" data-tip="Global commodity benchmarks that drive NZ fuel import costs. Brent crude (ICE futures) sets the base price; Heating Oil futures are the closest diesel proxy; RBOB Gasoline tracks petrol. All converted to NZD/litre using daily exchange rate. The gap between these benchmarks and NZ retail reflects taxes, margins, and transport lag.">Upstream Market Indicators</span>
+      <span class="section-meta">Yahoo Finance daily &bull; NZD/litre (converted at daily FX) &bull; <span class="tip" data-tip="Heating Oil (NYMEX HO) is the global diesel benchmark. RBOB Gasoline (NYMEX RB) is the petrol benchmark. Brent crude is the feedstock. The spread between crude and product = refining margin (crack spread).">futures benchmarks</span></span>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div id="upstream-price-chart" style="height:300px;"></div>
+      <div id="upstream-fx-chart" style="height:300px;"></div>
+    </div>
   </div>
 
   <!-- Section 5: Upstream Supply Chain -->
@@ -921,6 +939,22 @@
       <p class="empty-state" style="grid-column:1/-1">Loading…</p>
     </div>
   </div>
+
+  <!-- Scenario Projections -->
+  <div class="panel-header" style="margin-top:24px">
+    <span class="section-title tip" data-tip="Week-by-week fuel stock projections under 5 scenarios. Shows how different Hormuz outcomes change NZ's supply timeline and when intervention windows close.">Scenario Projections</span>
+    <span class="section-meta">52-week horizon &bull; select fuel type below</span>
+  </div>
+  <div id="scenario-intervention" style="font-size:13px;line-height:1.5;padding:8px 12px;margin-bottom:12px;background:var(--red-lt);border-left:3px solid var(--red);border-radius:4px;display:none"></div>
+  <div style="margin-bottom:8px">
+    <select id="scenario-fuel-select" style="font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text)">
+      <option value="diesel">Diesel</option>
+      <option value="petrol">Petrol</option>
+      <option value="jet">Jet Fuel</option>
+    </select>
+  </div>
+  <div id="scenario-chart" style="height:340px;"></div>
+  <div id="scenario-comparison" style="margin-top:12px"></div>
 
   <!-- Methodology & Assumptions -->
   <div class="fuel-methodology" id="fuel-methodology">
@@ -2057,6 +2091,8 @@ function initNZCitySelect(cities) {
 // ── Fuel Security data ────────────────────────────────────────────────────
 load(DATA + '/fuel_security.json').then(function (fuel) {
   renderFuelSecurity(fuel);
+  renderScenarioProjections(fuel);
+  renderUpstreamIndicators(fuel);
 }).catch(function () {
   var cards = document.getElementById('fuel-stock-cards');
   if (cards) {
@@ -2337,6 +2373,155 @@ function renderFuelSecurity(fuel) {
   }
 }
 
+function renderScenarioProjections(fuel) {
+  var scenarios = fuel.scenarios;
+  if (!scenarios || !scenarios.projections) return;
+
+  var scenarioColors = {
+    status_quo: '#e53e3e',
+    partial_reopening: '#ed8936',
+    full_reopening: '#48bb78',
+    compound_chokepoint: '#9b2c2c',
+    supply_competition: '#805ad5',
+  };
+  var scenarioOrder = ['status_quo', 'partial_reopening', 'full_reopening', 'compound_chokepoint', 'supply_competition'];
+  var scenarioDash = {
+    status_quo: 'solid',
+    partial_reopening: 'dash',
+    full_reopening: 'dash',
+    compound_chokepoint: 'solid',
+    supply_competition: 'solid',
+  };
+  var msoMins = { petrol: 28, diesel: 21, jet: 24 };
+  var fuelLabels = { petrol: 'Petrol', diesel: 'Diesel', jet: 'Jet Fuel' };
+
+  function renderChart(fuelType) {
+    var traces = [];
+    var today = new Date();
+
+    scenarioOrder.forEach(function (key) {
+      var proj = scenarios.projections[key];
+      if (!proj || !proj.weeks) return;
+
+      var weeks = proj.weeks;
+      var x = weeks.map(function (w) {
+        var d = new Date(today);
+        d.setDate(d.getDate() + w.week * 7);
+        return d.toISOString().slice(0, 10);
+      });
+      var y = weeks.map(function (w) {
+        var ft = w[fuelType];
+        return ft ? ft.onshore : null;
+      });
+
+      traces.push({
+        x: x, y: y,
+        name: proj.label,
+        type: 'scatter',
+        mode: 'lines',
+        line: { color: scenarioColors[key], width: key === 'status_quo' ? 3 : 2, dash: scenarioDash[key] },
+        hovertemplate: '<b>' + proj.label + '</b><br>' + fuelLabels[fuelType] + ': %{y:.1f} days<br>%{x}<extra></extra>',
+      });
+    });
+
+    // MSO reference line
+    var mso = msoMins[fuelType];
+    traces.push({
+      x: [traces[0].x[0], traces[0].x[Math.min(25, traces[0].x.length - 1)]],
+      y: [mso, mso],
+      name: 'MSO Minimum (' + mso + 'd)',
+      type: 'scatter',
+      mode: 'lines',
+      line: { color: 'var(--red)', width: 1, dash: 'dot' },
+      showlegend: true,
+      hoverinfo: 'skip',
+    });
+
+    // Zero line
+    traces.push({
+      x: [traces[0].x[0], traces[0].x[Math.min(25, traces[0].x.length - 1)]],
+      y: [0, 0],
+      name: 'Exhaustion',
+      type: 'scatter',
+      mode: 'lines',
+      line: { color: '#000', width: 1, dash: 'dot' },
+      showlegend: false,
+      hoverinfo: 'skip',
+    });
+
+    Plotly.newPlot('scenario-chart', traces, {
+      margin: { t: 10, r: 20, b: 40, l: 50 },
+      xaxis: { title: '', gridcolor: '#edf2f7' },
+      yaxis: { title: 'Onshore supply (days)', gridcolor: '#edf2f7', rangemode: 'tozero' },
+      legend: { orientation: 'h', y: -0.15, x: 0.5, xanchor: 'center', font: { size: 11 } },
+      plot_bgcolor: 'rgba(0,0,0,0)',
+      paper_bgcolor: 'rgba(0,0,0,0)',
+      font: { family: 'var(--font)', color: 'var(--text)', size: 12 },
+      hovermode: 'x unified',
+    }, { responsive: true, displayModeBar: false });
+  }
+
+  // Initial render
+  renderChart('diesel');
+
+  // Fuel type selector
+  var select = document.getElementById('scenario-fuel-select');
+  if (select) {
+    select.addEventListener('change', function () {
+      renderChart(this.value);
+    });
+  }
+
+  // Intervention window text
+  var comp = scenarios.comparison || {};
+  var interventionEl = document.getElementById('scenario-intervention');
+  if (interventionEl && comp.window_of_intervention) {
+    interventionEl.textContent = comp.window_of_intervention;
+    interventionEl.style.display = 'block';
+  }
+
+  // Comparison table
+  var compEl = document.getElementById('scenario-comparison');
+  if (compEl && comp.rationing_dates) {
+    var table = el('table', { class: 'cascade-table' });
+    var thead = el('thead');
+    var hrow = el('tr');
+    ['Scenario', 'Rationing Onset', 'Recovery', 'Status'].forEach(function (h) {
+      hrow.appendChild(el('th', null, h));
+    });
+    thead.appendChild(hrow);
+    table.appendChild(thead);
+
+    var tbody = el('tbody');
+    scenarioOrder.forEach(function (key) {
+      var proj = scenarios.projections[key];
+      if (!proj) return;
+      var rat = comp.rationing_dates[key];
+      var rec = (comp.recovery_dates || {})[key];
+
+      var row = el('tr');
+      if (rat && !rec) row.className = 'imminent';
+
+      row.appendChild(el('td', { style: 'font-weight:500' }, proj.label));
+      row.appendChild(el('td', null, rat || 'Averted'));
+
+      var recText = rec || (rat ? 'Never' : '—');
+      row.appendChild(el('td', null, recText));
+
+      var status, statusColor;
+      if (!rat) { status = 'AVERTED'; statusColor = '#48bb78'; }
+      else if (new Date(rat) <= new Date()) { status = 'BREACHED'; statusColor = 'var(--red)'; }
+      else { status = 'PROJECTED'; statusColor = '#ed8936'; }
+      row.appendChild(el('td', { style: 'font-weight:600;color:' + statusColor }, status));
+
+      tbody.appendChild(row);
+    });
+    table.appendChild(tbody);
+    compEl.textContent = '';
+    compEl.appendChild(table);
+  }
+}
+
 function renderFuelHormuzChart(sar) {
   var hormuz = sar['Strait of Hormuz'] || sar['Hormuz'];
   if (!hormuz || !hormuz.length) return;
@@ -2376,6 +2561,136 @@ function renderFuelHormuzChart(sar) {
     }],
     paper_bgcolor: 'transparent', plot_bgcolor: 'transparent', font: { family: 'Inter, sans-serif', size: 11, color: '#4a5568' },
   }, { responsive: true, displayModeBar: false });
+}
+
+// ── Upstream market indicators ────────────────────────────────────────────
+function renderUpstreamIndicators(fuel) {
+  var up = fuel.upstream;
+  if (!up) return;
+
+  var baselines = up.baselines || {};
+  var warLine = '2026-02-28';
+  var commonLayout = {
+    margin: { t: 10, r: 60, b: 40, l: 55 },
+    paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
+    font: { family: 'Inter, sans-serif', size: 11, color: '#4a5568' },
+    hovermode: 'x unified',
+    shapes: [{ type: 'line', x0: warLine, x1: warLine, y0: 0, y1: 1, yref: 'paper',
+      line: { color: '#c0392b', width: 1.5, dash: 'dash' } }],
+    annotations: [{ x: warLine, y: 1, yref: 'paper', text: 'War', showarrow: false,
+      font: { size: 10, color: '#c0392b' }, yanchor: 'bottom' }],
+  };
+
+  // ── Left chart: commodity benchmarks in NZD/L ──
+  var traces = [];
+  if (up.brent_crude && up.brent_crude.length) {
+    traces.push({
+      x: up.brent_crude.map(function (d) { return d.date; }),
+      y: up.brent_crude.map(function (d) { return d.nzd_litre; }),
+      name: 'Brent crude',
+      type: 'scatter', mode: 'lines',
+      line: { color: '#2d3748', width: 2 },
+      hovertemplate: '<b>Brent</b> %{y:.3f} NZD/L<extra></extra>',
+    });
+    // Baseline
+    if (baselines.brent_nzd_litre) {
+      traces.push({
+        x: [up.brent_crude[0].date, up.brent_crude[up.brent_crude.length - 1].date],
+        y: [baselines.brent_nzd_litre, baselines.brent_nzd_litre],
+        name: 'Brent baseline', type: 'scatter', mode: 'lines',
+        line: { color: '#2d3748', width: 1, dash: 'dot' }, showlegend: false,
+        hovertemplate: 'Brent baseline: %{y:.3f}<extra></extra>',
+      });
+    }
+  }
+  if (up.heating_oil_futures && up.heating_oil_futures.length) {
+    traces.push({
+      x: up.heating_oil_futures.map(function (d) { return d.date; }),
+      y: up.heating_oil_futures.map(function (d) { return d.nzd_litre; }),
+      name: 'Heating Oil (diesel proxy)',
+      type: 'scatter', mode: 'lines',
+      line: { color: '#e53e3e', width: 2 },
+      hovertemplate: '<b>HO futures</b> %{y:.3f} NZD/L<extra></extra>',
+    });
+  }
+  if (up.rbob_gasoline_futures && up.rbob_gasoline_futures.length) {
+    traces.push({
+      x: up.rbob_gasoline_futures.map(function (d) { return d.date; }),
+      y: up.rbob_gasoline_futures.map(function (d) { return d.nzd_litre; }),
+      name: 'RBOB Gasoline (petrol proxy)',
+      type: 'scatter', mode: 'lines',
+      line: { color: '#3182ce', width: 2 },
+      hovertemplate: '<b>RBOB futures</b> %{y:.3f} NZD/L<extra></extra>',
+    });
+  }
+
+  // Overlay NZ retail diesel + petrol for comparison
+  var prices = fuel.prices || {};
+  if (prices.diesel && prices.diesel.length) {
+    var warDiesel = prices.diesel.filter(function (p) { return p.date >= '2026-01-01'; });
+    if (warDiesel.length) {
+      traces.push({
+        x: warDiesel.map(function (p) { return p.date; }),
+        y: warDiesel.map(function (p) { return p.retail; }),
+        name: 'NZ retail diesel',
+        type: 'scatter', mode: 'lines+markers',
+        line: { color: '#e53e3e', width: 1, dash: 'dash' },
+        marker: { size: 4, symbol: 'diamond' },
+        hovertemplate: '<b>NZ diesel</b> $%{y:.3f}/L<extra></extra>',
+      });
+    }
+  }
+  if (prices['91'] && prices['91'].length) {
+    var warPetrol = prices['91'].filter(function (p) { return p.date >= '2026-01-01'; });
+    if (warPetrol.length) {
+      traces.push({
+        x: warPetrol.map(function (p) { return p.date; }),
+        y: warPetrol.map(function (p) { return p.retail; }),
+        name: 'NZ retail 91',
+        type: 'scatter', mode: 'lines+markers',
+        line: { color: '#3182ce', width: 1, dash: 'dash' },
+        marker: { size: 4, symbol: 'diamond' },
+        hovertemplate: '<b>NZ 91</b> $%{y:.3f}/L<extra></extra>',
+      });
+    }
+  }
+
+  if (traces.length) {
+    var layout = Object.assign({}, commonLayout, {
+      xaxis: { gridcolor: '#edf2f7' },
+      yaxis: { title: 'NZD / litre', gridcolor: '#edf2f7' },
+      legend: { orientation: 'h', y: 1.15, font: { size: 10 } },
+    });
+    Plotly.newPlot('upstream-price-chart', traces, layout, { responsive: true, displayModeBar: false });
+  }
+
+  // ── Right chart: NZD/USD exchange rate ──
+  if (up.nzdusd && up.nzdusd.length) {
+    var fxTraces = [{
+      x: up.nzdusd.map(function (d) { return d.date; }),
+      y: up.nzdusd.map(function (d) { return d.rate; }),
+      name: 'NZD/USD',
+      type: 'scatter', mode: 'lines',
+      line: { color: '#0d9488', width: 2 },
+      fill: 'tozeroy', fillcolor: 'rgba(13,148,136,0.08)',
+      hovertemplate: '<b>NZD/USD</b> %{y:.4f}<extra></extra>',
+    }];
+    if (baselines.nzdusd) {
+      fxTraces.push({
+        x: [up.nzdusd[0].date, up.nzdusd[up.nzdusd.length - 1].date],
+        y: [baselines.nzdusd, baselines.nzdusd],
+        name: 'Pre-war avg', type: 'scatter', mode: 'lines',
+        line: { color: '#a0aec0', width: 1, dash: 'dash' },
+        hovertemplate: 'Baseline: %{y:.4f}<extra></extra>',
+      });
+    }
+    var fxLayout = Object.assign({}, commonLayout, {
+      xaxis: { gridcolor: '#edf2f7' },
+      yaxis: { title: 'NZD per USD', gridcolor: '#edf2f7', autorange: true },
+      legend: { orientation: 'h', y: 1.15, font: { size: 10 } },
+    });
+    Plotly.newPlot('upstream-fx-chart', fxTraces, fxLayout, { responsive: true, displayModeBar: false });
+  }
 }
 
 // ── tab switching ─────────────────────────────────────────────────────────

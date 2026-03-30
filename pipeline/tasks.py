@@ -2610,6 +2610,40 @@ def calculate_fuel_security_indicator(self):
 
     depletion_projections["second_order_effects"] = second_order
 
+    # --- Scenario projections ---
+    # Build current state snapshot for the scenario engine
+    if latest_stock_date and depletion_projections:
+        from pipeline.scenarios import CurrentState, run_all_scenarios
+
+        scenario_onshore = {}
+        scenario_on_water = {}
+        scenario_demand_surge = 1.0
+        for ft in ("petrol", "diesel", "jet"):
+            proj = depletion_projections.get(ft, {})
+            scenario_onshore[ft] = proj.get("projected_onshore", 0)
+            scenario_on_water[ft] = proj.get("on_water_days", 0) or 0
+            scenario_demand_surge = proj.get("demand_surge_multiplier", 1.0)
+
+        current_state = CurrentState(
+            measurement_date=latest_stock_date,
+            days_since_measurement=(today - latest_stock_date).days,
+            onshore_days=scenario_onshore,
+            on_water_days=scenario_on_water,
+            hormuz_pct=avg_hormuz_pct,
+            avg_price_pct=avg_price_pct,
+            demand_surge_multiplier=scenario_demand_surge,
+        )
+
+        try:
+            scenarios_output = run_all_scenarios(current_state, horizon_weeks=52)
+            depletion_projections["scenarios"] = scenarios_output
+            logger.info(
+                "Scenario projections: %s",
+                {k: v for k, v in scenarios_output.get("comparison", {}).get("rationing_dates", {}).items()},
+            )
+        except Exception:
+            logger.exception("Scenario projection failed — continuing without scenarios")
+
     NZFuelSecurityIndicator.objects.update_or_create(
         date=today,
         defaults={
