@@ -113,6 +113,40 @@ COMMODITY_PROFILES = {
              "gdp_exposure_pct": 0.3, "lag_weeks": 12},
         ],
     },
+    "palm_kernel": {
+        "label": "Palm Kernel Expeller (Dairy Feed)",
+        "hs_code": "2306",
+        "annual_import_usd": 350_000_000,  # ~2Mt at ~$175/t
+        # Direct Hormuz exposure is ~5%, but the REAL risk is Indonesian
+        # export ban triggered by global food/energy crisis. Indonesia
+        # banned palm oil exports Apr-Jun 2022 (5 months). In a deeper
+        # crisis, probability is ~60-70%. If banned, ~85% of NZ supply lost.
+        # Expected exposure = P(ban) × magnitude ≈ 0.65 × 0.85 ≈ 55%.
+        # We model this as equivalent exposure since the stress multiplier
+        # then compounds it further.
+        "hormuz_exposure_pct": 55.0,  # crisis-triggered export ban risk
+        "top_sources": ["Indonesia (85%)", "Malaysia (12%)"],
+        # NZ is the WORLD'S LARGEST importer of palm kernel for cattle feed
+        # Dairy NZ estimates 2Mt/year, ~30% of supplementary feed
+        "stock_days": 21,  # feed mills hold 2-3 weeks
+        "seasonal_demand_multiplier": 1.1,  # autumn calving season
+        # Substitution is very limited: no domestic alternative at this scale
+        # Soy meal (US/Brazil) or DDGs could partially substitute but
+        # NZ dairy systems are built around PKE
+        "substitution_rate": 0.15,
+        "impact_lag_weeks": 2,  # feed shortage hits milk production fast
+        # CRITICAL: Risk is NOT Hormuz dependency but Indonesian EXPORT BAN.
+        # Indonesia banned palm oil exports in 2022 (Apr-Jun).
+        # In a global food/energy crisis, Indonesia is highly likely to
+        # restrict palm product exports to protect domestic supply.
+        # We model this via the global_stress_multiplier + high sensitivity.
+        "downstream_effects": [
+            {"sector": "Dairy", "mechanism": "Cattle feed shortage → milk production drops 10-20%",
+             "gdp_exposure_pct": 4.0, "lag_weeks": 4},
+            {"sector": "Dairy exports", "mechanism": "WMP/SMP volume reduction → export revenue loss",
+             "gdp_exposure_pct": 2.5, "lag_weeks": 8},
+        ],
+    },
     "refined_petroleum": {
         "label": "Refined Petroleum",
         "hs_code": "2710",
@@ -171,17 +205,19 @@ REFINER_OUTPUT_LOSS = [
 #
 # Format: (multiplier, week) — 1.0 = no indirect effect
 
+# Calibrated against research: 1.25-1.45x at week ~5 (confirmed by SK export caps,
+# SCFI +28%, Yara at 35% capacity, P&I Gulf coverage cancelled).
 GLOBAL_STRESS_MULTIPLIER = [
-    (1.0,  0),    # Week 0: no indirect effects yet — buffers everywhere
-    (1.05, 2),    # Week 2: shipping costs rising, early competition signals
-    (1.15, 4),    # Week 4: European gas spike, refinery competition visible
-    (1.35, 8),    # Week 8: European fertiliser plants shutting, export bans starting
-    (1.60, 12),   # Week 12: substitution plans colliding globally, freight rates 2x
-    (1.80, 16),   # Week 16: financial contagion, trade finance contracting
-    (2.00, 20),   # Week 20: full compound stress — alternatives largely exhausted
-    (2.20, 26),   # Week 26: structural degradation of global trade system
-    (2.30, 36),   # Week 36: new degraded equilibrium forming
-    (2.30, 52),   # Week 52: saturated — system has adapted to degraded state
+    (1.0,  0),    # Week 0: buffers absorb
+    (1.10, 2),    # Week 2: SK export caps enacted, shipping costs +15%
+    (1.25, 4),    # Week 4: EU gas spike, refinery competition, freight +28%
+    (1.45, 8),    # Week 8: EU fertiliser shutting, export bans starting, insurance seized
+    (1.65, 12),   # Week 12: substitution plans colliding globally, freight 2x+
+    (1.85, 16),   # Week 16: EM financial contagion, trade finance contracting
+    (2.00, 20),   # Week 20: alternatives largely exhausted for small buyers
+    (2.15, 26),   # Week 26: structural degradation
+    (2.25, 36),   # Week 36: new degraded equilibrium
+    (2.25, 52),   # Week 52: saturated
 ]
 
 # Per-commodity sensitivity to global stress
@@ -192,7 +228,11 @@ COMMODITY_STRESS_SENSITIVITY = {
     "polyethylene": 1.2,          # High: petrochemical feedstock competition
     "polypropylene": 1.2,         # High: same feedstock competition
     "organic_chemicals": 1.0,     # Low: diversified sources, lower Hormuz exposure
-    "refined_petroleum": 1.4,     # Highest: most fungible, most competed-for globally
+    "palm_kernel": 2.0,           # EXTREME: risk is Indonesian export ban, not Hormuz transit.
+                                  # Indonesia banned palm oil exports in 2022 (5 months duration).
+                                  # In a global food/energy crisis, export ban probability is very high.
+                                  # High stress sensitivity models this as a quasi-certain event.
+    "refined_petroleum": 1.4,     # Highest non-ban: most fungible, most competed-for globally
 }
 
 

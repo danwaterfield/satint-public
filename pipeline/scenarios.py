@@ -96,15 +96,15 @@ MAX_WEEKLY_RECOVERY = 1.0
 FUEL_STRESS_SENSITIVITY = 1.4
 GLOBAL_STRESS_MULTIPLIER = [
     (1.0,  0),    # Week 0: buffers absorb
-    (1.05, 2),    # Week 2: shipping costs rising
-    (1.15, 4),    # Week 4: refinery competition visible
-    (1.35, 8),    # Week 8: substitution plans colliding globally
-    (1.60, 12),   # Week 12: freight rates 2x, export bans
-    (1.80, 16),   # Week 16: financial contagion
-    (2.00, 20),   # Week 20: alternatives largely exhausted
-    (2.20, 26),   # Week 26: structural degradation
-    (2.30, 36),   # Week 36: saturated
-    (2.30, 52),   # Week 52: new degraded equilibrium
+    (1.10, 2),    # Week 2: SK export caps, shipping +15%
+    (1.25, 4),    # Week 4: EU gas spike, refinery competition, freight +28%
+    (1.45, 8),    # Week 8: EU fertiliser shutting, export bans, insurance seized
+    (1.65, 12),   # Week 12: substitution plans colliding, freight 2x+
+    (1.85, 16),   # Week 16: EM financial contagion, trade finance contracting
+    (2.00, 20),   # Week 20: alternatives exhausted for small buyers
+    (2.15, 26),   # Week 26: structural degradation
+    (2.25, 36),   # Week 36: new degraded equilibrium
+    (2.25, 52),   # Week 52: saturated
 ]
 
 
