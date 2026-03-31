@@ -2413,12 +2413,26 @@ def calculate_fuel_security_indicator(self):
 
             mso = _MSO_MINIMUMS.get(fuel_type, 21)
             days_above_mso = onshore.days_of_supply - mso
-            total_days = onshore.days_of_supply + (on_water.days_of_supply if on_water else 0)
-
             # Depletion model — calibrated against MBIE actuals (Mar 15 2026)
             hormuz_disruption_frac = max(0, -avg_hormuz_pct / 100) if hormuz_commercial else 0
             nz_hormuz_dependency = 0.62  # UN Comtrade 2024: 61.5% of NZ refined petroleum imports Hormuz-dependent
-            resupply_reduction = hormuz_disruption_frac * nz_hormuz_dependency
+
+            # Refiner re-sourcing: refiners replace some lost Gulf crude from
+            # non-Gulf sources (West Africa, Americas). ~45% of dependent output
+            # is actually lost at this point in the crisis (~4 weeks in).
+            # See pipeline/scenarios.py REFINER_OUTPUT_LOSS for full decay curve.
+            days_since_war = (today - date(2026, 2, 28)).days
+            weeks_since_war = days_since_war / 7
+            if weeks_since_war <= 4:
+                refiner_loss = 0.55 - (0.15 * weeks_since_war / 4)  # 0.55 → 0.40
+            elif weeks_since_war <= 8:
+                refiner_loss = 0.40 - (0.10 * (weeks_since_war - 4) / 4)  # 0.40 → 0.30
+            elif weeks_since_war <= 16:
+                refiner_loss = 0.30 - (0.05 * (weeks_since_war - 8) / 8)  # 0.30 → 0.25
+            else:
+                refiner_loss = max(0.20, 0.25 - 0.005 * (weeks_since_war - 16))
+
+            resupply_reduction = hormuz_disruption_frac * nz_hormuz_dependency * refiner_loss
 
             # Demand surge multiplier: panic buying accelerates consumption
             # NZ Herald Mar 15: Gull reported 15%+ demand surge, $3/L breached
@@ -2445,8 +2459,9 @@ def calculate_fuel_security_indicator(self):
 
                 days_to_mso = max(0, projected_days_above_mso / net_daily_depletion)
             else:
-                projected_onshore = onshore.days_of_supply
-                projected_days_above_mso = days_above_mso
+                # Supply >= demand — stocks stable or recovering
+                projected_onshore = onshore.days_of_supply + abs(net_daily_depletion) * days_elapsed
+                projected_days_above_mso = projected_onshore - mso
                 days_to_mso = None
 
             # On-water adjustment: any significant Hormuz disruption forces
@@ -2485,10 +2500,13 @@ def calculate_fuel_security_indicator(self):
             (p["days_above_mso"] for p in depletion_projections.values()),
             default=30,
         )
-        # 0 days above MSO = score 1.0, 30 days = score ~0
-        stock_score = _sigmoid_score(-worst_margin, -10, steepness=0.15)
+        # Score = 0.5 at MSO boundary (0 days above), ~1.0 when below, ~0 when well above
+        stock_score = _sigmoid_score(-worst_margin, 0, steepness=0.15)
 
     # --- 4. Supply chain score (10%) — uses Hormuz as proxy ---
+    # Note: this gives Hormuz an effective weight of ~38% (30% direct + 8% via supply chain).
+    # Hormuz also flows into stock_score via the depletion model. This is intentional —
+    # Hormuz IS the dominant risk factor — but stated weights are approximate.
     supply_chain_score = hormuz_score * 0.8  # correlated but dampened
 
     # --- 5. Demand signal (10%) — NZ flights as proxy ---
@@ -2617,12 +2635,10 @@ def calculate_fuel_security_indicator(self):
 
         scenario_onshore = {}
         scenario_on_water = {}
-        scenario_demand_surge = 1.0
         for ft in ("petrol", "diesel", "jet"):
             proj = depletion_projections.get(ft, {})
             scenario_onshore[ft] = proj.get("projected_onshore", 0)
             scenario_on_water[ft] = proj.get("on_water_days", 0) or 0
-            scenario_demand_surge = proj.get("demand_surge_multiplier", 1.0)
 
         current_state = CurrentState(
             measurement_date=latest_stock_date,
@@ -2631,7 +2647,6 @@ def calculate_fuel_security_indicator(self):
             on_water_days=scenario_on_water,
             hormuz_pct=avg_hormuz_pct,
             avg_price_pct=avg_price_pct,
-            demand_surge_multiplier=scenario_demand_surge,
         )
 
         try:

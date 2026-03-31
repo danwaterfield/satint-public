@@ -6,7 +6,7 @@ Takes current state as input, runs depletion mechanics under 5 parameter sets,
 outputs week-by-week projection curves per fuel type per scenario.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date, timedelta
 
 
@@ -72,6 +72,23 @@ MSO_MINIMUMS = {"petrol": 28.0, "diesel": 21.0, "jet": 24.0}
 NZ_HORMUZ_DEPENDENCY = 0.62
 NZ_BAB_DEPENDENCY = 0.10
 
+# Refiner re-sourcing curve: fraction of Hormuz-dependent refinery output
+# actually lost over time. Refiners scramble for non-Gulf crude but can't
+# replace all of it. Decays as alternative supply contracts establish.
+# Source: IEA disruption response estimates, 1973/1990/2019 precedents.
+# Format: (loss_fraction, week) — same tuple order as hormuz_trajectory
+REFINER_OUTPUT_LOSS = [
+    (0.55, 0),    # Week 0: 55% of dependent output lost (crude stocks buffer ~2-3 weeks)
+    (0.40, 4),    # Week 4: re-sourcing from Atlantic basin begins
+    (0.30, 8),    # Week 8: alternative contracts established
+    (0.25, 16),   # Week 16: structural deficit stabilises
+    (0.20, 52),   # Week 52: long-term irreducible loss
+]
+
+# Maximum stock recovery rate: 1 day of supply per week when resupply > demand.
+# Constrained by port throughput, tanker scheduling, and terminal capacity.
+MAX_WEEKLY_RECOVERY = 1.0
+
 
 # ---------------------------------------------------------------------------
 # Data classes
@@ -86,16 +103,6 @@ class CurrentState:
     on_water_days: dict         # {"petrol": 24.2, "diesel": 28.3, "jet": 33.3}
     hormuz_pct: float           # Current disruption: -86
     avg_price_pct: float        # Current price change vs baseline
-    demand_surge_multiplier: float  # Current demand surge
-
-
-@dataclass
-class WeekProjection:
-    """Single week's projection for one fuel type."""
-    onshore: float
-    on_water: float
-    total: float
-    above_mso: float
 
 
 @dataclass
@@ -109,21 +116,20 @@ class ScenarioResult:
 
 
 # ---------------------------------------------------------------------------
-# Engine
+# Engine helpers
 # ---------------------------------------------------------------------------
 
-def _interpolate_hormuz(trajectory, week):
-    """Linearly interpolate Hormuz disruption % at a given week."""
-    for i in range(len(trajectory) - 1):
-        pct_a, week_a = trajectory[i]
-        pct_b, week_b = trajectory[i + 1]
+def _interpolate(waypoints, week):
+    """Linearly interpolate a value at a given week from (value, week) waypoints."""
+    for i in range(len(waypoints) - 1):
+        val_a, week_a = waypoints[i]
+        val_b, week_b = waypoints[i + 1]
         if week_a <= week <= week_b:
             if week_b == week_a:
-                return pct_a
+                return val_a
             t = (week - week_a) / (week_b - week_a)
-            return pct_a + t * (pct_b - pct_a)
-    # Beyond trajectory — hold last value
-    return trajectory[-1][0]
+            return val_a + t * (val_b - val_a)
+    return waypoints[-1][0]
 
 
 def _cape_delay_at_week(base_delay, hormuz_pct):
@@ -135,6 +141,31 @@ def _cape_delay_at_week(base_delay, hormuz_pct):
     else:
         return 0
 
+
+def _demand_surge_at_week(base_price_pct, elasticity, week):
+    """
+    Demand surge decays over time as demand destruction takes hold.
+
+    Week 0-3: full panic buying (15% cap)
+    Week 4-8: fading as prices bite (halved)
+    Week 9+:  demand destruction dominates (minimal surge)
+    """
+    base_effect = min(0.15, max(0, base_price_pct) * elasticity)
+    if week <= 3:
+        return 1.0 + base_effect
+    elif week <= 8:
+        # Linear decay from full to half
+        decay = 1.0 - 0.5 * (week - 3) / 5
+        return 1.0 + base_effect * decay
+    else:
+        # Demand destruction: surge drops to 20% of initial, then to 0
+        decay = max(0, 0.2 - 0.01 * (week - 8))
+        return 1.0 + base_effect * decay
+
+
+# ---------------------------------------------------------------------------
+# Core projection
+# ---------------------------------------------------------------------------
 
 def project_scenario(state: CurrentState, scenario_key: str, scenario: dict,
                      horizon_weeks: int = 52) -> ScenarioResult:
@@ -149,29 +180,29 @@ def project_scenario(state: CurrentState, scenario_key: str, scenario: dict,
     weeks_data = []
     key_dates = {}
 
-    # Track cumulative depletion per fuel type
+    # Track net stock position per fuel type (can go negative = deficit, positive = surplus vs start)
     cumulative_depletion = {ft: 0.0 for ft in FUEL_TYPES}
-    # Track on-water depletion once onshore hits zero (on-water becomes the buffer)
     on_water_remaining = {ft: state.on_water_days.get(ft, 0) for ft in FUEL_TYPES}
-
-    # Pre-compute starting onshore (already adjusted for days since measurement
-    # using current depletion rate from the main model)
     starting_onshore = dict(state.onshore_days)
 
     for week in range(horizon_weeks + 1):
-        hormuz_pct = _interpolate_hormuz(trajectory, week)
+        hormuz_pct = _interpolate(trajectory, week)
         hormuz_frac = max(0, -hormuz_pct / 100)
 
-        # Supply loss rate
-        supply_loss = (hormuz_frac * NZ_HORMUZ_DEPENDENCY
-                       + bab_frac * NZ_BAB_DEPENDENCY
+        # Refiner re-sourcing: not all Hormuz-dependent output is lost —
+        # refiners scramble for alternative crude. Loss fraction decays over time.
+        refiner_loss = _interpolate(REFINER_OUTPUT_LOSS, week)
+
+        # Supply loss rate: physical supply actually lost to NZ
+        supply_loss = (hormuz_frac * NZ_HORMUZ_DEPENDENCY * refiner_loss
+                       + bab_frac * NZ_BAB_DEPENDENCY * refiner_loss
                        + competition_frac)
 
-        # Demand surge — decays toward normal as disruption eases
-        price_effect = min(0.15, max(0, state.avg_price_pct) * elasticity)
-        demand_surge = 1.0 + price_effect
+        # Demand surge decays over time (panic buying → demand destruction)
+        demand_surge = _demand_surge_at_week(state.avg_price_pct, elasticity, week)
 
-        # Net daily depletion rate (fraction of supply consumed per day beyond resupply)
+        # Net daily depletion rate
+        # Positive = depleting, negative = resupplying (stocks recovering)
         net_daily = supply_loss + (demand_surge - 1.0)
 
         # Cape delay for this week
@@ -180,9 +211,12 @@ def project_scenario(state: CurrentState, scenario_key: str, scenario: dict,
         week_row = {"week": week, "hormuz_pct": round(hormuz_pct, 1)}
 
         for ft in FUEL_TYPES:
-            # Weekly depletion (7 days per week)
             if week > 0:
-                cumulative_depletion[ft] += net_daily * 7
+                weekly_delta = net_daily * 7
+                # If recovering (negative delta), cap at realistic refill rate
+                if weekly_delta < 0:
+                    weekly_delta = max(weekly_delta, -MAX_WEEKLY_RECOVERY)
+                cumulative_depletion[ft] = max(0, cumulative_depletion[ft] + weekly_delta)
 
             projected_onshore = max(0, starting_onshore[ft] - cumulative_depletion[ft])
 
@@ -190,8 +224,12 @@ def project_scenario(state: CurrentState, scenario_key: str, scenario: dict,
             effective_on_water = max(0, on_water_remaining[ft] - cape_delay)
 
             # Once onshore hits zero, on-water depletes too (it becomes the active buffer)
-            if projected_onshore <= 0 and week > 0:
-                on_water_remaining[ft] = max(0, on_water_remaining[ft] - net_daily * 7)
+            # Guard: only deplete on-water if there's still accessible supply
+            if projected_onshore <= 0 and week > 0 and net_daily > 0:
+                accessible = on_water_remaining[ft] - cape_delay
+                if accessible > 0:
+                    draw = min(net_daily * 7, accessible)
+                    on_water_remaining[ft] -= draw
                 effective_on_water = max(0, on_water_remaining[ft] - cape_delay)
 
             total = projected_onshore + effective_on_water
@@ -215,7 +253,7 @@ def project_scenario(state: CurrentState, scenario_key: str, scenario: dict,
                 key_dates[exhaust_key] = _week_to_date(state.measurement_date,
                                                         state.days_since_measurement, week)
 
-            # Recovery: was below MSO, now above (only for reopening scenarios)
+            # Recovery: was below MSO, now above again
             recovery_key = f"{ft}_recovery"
             if recovery_key not in key_dates and mso_key in key_dates and above_mso >= 0 and week > 0:
                 key_dates[recovery_key] = _week_to_date(state.measurement_date,
@@ -252,7 +290,6 @@ def project_scenario(state: CurrentState, scenario_key: str, scenario: dict,
 
 def _week_to_date(measurement_date, days_since, week):
     """Convert a week number to an actual calendar date."""
-    # Week 0 = today (measurement_date + days_since_measurement)
     today = measurement_date + timedelta(days=days_since)
     return today + timedelta(weeks=week)
 
@@ -264,8 +301,6 @@ def _week_to_date(measurement_date, days_since, week):
 def run_all_scenarios(state: CurrentState, horizon_weeks: int = 52) -> dict:
     """
     Run all 5 scenarios and return structured output for JSON export.
-
-    Returns dict ready to merge into depletion_projections or export directly.
     """
     from datetime import datetime
 
@@ -294,7 +329,6 @@ def run_all_scenarios(state: CurrentState, horizon_weeks: int = 52) -> dict:
                 earliest_exhaust = exhaust
                 worst_fuel = ft
 
-    # Generate intervention window text
     window_text = _generate_intervention_text(rationing_dates, recovery_dates)
 
     return {
@@ -320,10 +354,10 @@ def _generate_intervention_text(rationing_dates, recovery_dates):
     """Generate a human-readable intervention window summary."""
     parts = []
 
-    # Check if partial reopening helps
     sq = rationing_dates.get("status_quo")
     pr = rationing_dates.get("partial_reopening")
     fr = rationing_dates.get("full_reopening")
+    fr_rec = recovery_dates.get("full_reopening")
 
     if pr and sq and pr > sq:
         parts.append(f"Partial reopening of Hormuz delays NZ rationing to {pr}.")
@@ -332,10 +366,11 @@ def _generate_intervention_text(rationing_dates, recovery_dates):
 
     if fr is None:
         parts.append("Full reopening within 8 weeks averts rationing entirely.")
+    elif fr_rec:
+        parts.append(f"Full reopening allows stock recovery by {fr_rec}.")
     elif fr and sq:
         parts.append(f"Full reopening delays rationing to {fr}.")
 
-    # Check compound scenarios
     cc = rationing_dates.get("compound_chokepoint")
     if cc and sq and cc < sq:
         parts.append(f"Compound chokepoint failure accelerates rationing to {cc}.")
