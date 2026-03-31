@@ -137,6 +137,64 @@ REFINER_OUTPUT_LOSS = [
     (0.55, 0), (0.40, 4), (0.30, 8), (0.25, 16), (0.20, 52),
 ]
 
+# ---------------------------------------------------------------------------
+# Global stress multiplier
+# ---------------------------------------------------------------------------
+# Models indirect/second-order effects that compound with direct Hormuz exposure:
+#
+# 1. Refinery competition: 20M bbl/day Gulf crude offline → all refineries
+#    bid for same non-Gulf supply → small buyers (NZ) get squeezed out.
+#    NZ buys ~150k bbl/day — a rounding error vs China/Japan/India.
+#
+# 2. European ammonia shutdown: ~30% of global ammonia is European, produced
+#    from natural gas. Qatar LNG offline → European gas spike → fertiliser
+#    plants close (as in 2022 Russian gas crisis). NZ's "non-Hormuz"
+#    fertiliser sources face competition from European buyers.
+#
+# 3. Shipping capacity crunch: Cape rerouting adds ~15% to global tanker-days.
+#    Fewer ships for ALL routes including NZ's non-Hormuz trade. Freight
+#    rates spike across the board.
+#
+# 4. Export bans: Food-exporting countries restrict exports when prices spike
+#    (India wheat 2022, Indonesia palm oil 2022). Reduces NZ's alternative
+#    sourcing options.
+#
+# 5. Financial contagion: Oil-importing EMs (Egypt, Pakistan, Bangladesh)
+#    face sovereign stress → trade finance dries up → physical trade stops.
+#
+# 6. Insurance market: War risk premiums spread beyond Gulf, increasing
+#    shipping costs globally.
+#
+# Shape: sigmoid — slow start (buffers absorb), rapid acceleration
+# (substitution plans collide), saturation (new degraded equilibrium).
+# Multiplier applies to effective_loss, compounding the direct supply gap.
+#
+# Format: (multiplier, week) — 1.0 = no indirect effect
+
+GLOBAL_STRESS_MULTIPLIER = [
+    (1.0,  0),    # Week 0: no indirect effects yet — buffers everywhere
+    (1.05, 2),    # Week 2: shipping costs rising, early competition signals
+    (1.15, 4),    # Week 4: European gas spike, refinery competition visible
+    (1.35, 8),    # Week 8: European fertiliser plants shutting, export bans starting
+    (1.60, 12),   # Week 12: substitution plans colliding globally, freight rates 2x
+    (1.80, 16),   # Week 16: financial contagion, trade finance contracting
+    (2.00, 20),   # Week 20: full compound stress — alternatives largely exhausted
+    (2.20, 26),   # Week 26: structural degradation of global trade system
+    (2.30, 36),   # Week 36: new degraded equilibrium forming
+    (2.30, 52),   # Week 52: saturated — system has adapted to degraded state
+]
+
+# Per-commodity sensitivity to global stress
+# Some commodities are more affected by indirect channels than others
+COMMODITY_STRESS_SENSITIVITY = {
+    "fertiliser_nitrogen": 1.3,   # High: European ammonia shutdown directly reduces global supply
+    "fertiliser_mixed": 1.1,      # Moderate: more diversified, less gas-dependent
+    "polyethylene": 1.2,          # High: petrochemical feedstock competition
+    "polypropylene": 1.2,         # High: same feedstock competition
+    "organic_chemicals": 1.0,     # Low: diversified sources, lower Hormuz exposure
+    "refined_petroleum": 1.4,     # Highest: most fungible, most competed-for globally
+}
+
 
 def _interpolate(waypoints, week):
     """Linearly interpolate from (value, week) waypoints."""
@@ -169,12 +227,14 @@ def project_commodity(key: str, profile: dict, hormuz_frac: float,
                       war_start: date, today: date,
                       horizon_weeks: int = 52) -> CommodityProjection:
     """
-    Project a commodity's stock depletion under current Hormuz disruption.
+    Project a commodity's stock depletion under current Hormuz disruption,
+    including indirect global stress effects.
     """
     stock = profile["stock_days"]
     exposure = profile["hormuz_exposure_pct"] / 100
     seasonal = profile["seasonal_demand_multiplier"]
     substitution = profile["substitution_rate"]
+    stress_sensitivity = COMMODITY_STRESS_SENSITIVITY.get(key, 1.0)
 
     weeks_since_war = (today - war_start).days / 7
     stock_weeks = []
@@ -187,14 +247,25 @@ def project_commodity(key: str, profile: dict, hormuz_frac: float,
         absolute_week = weeks_since_war + week
         refiner_loss = _interpolate(REFINER_OUTPUT_LOSS, absolute_week)
 
-        # Effective supply loss for this commodity
-        supply_loss = hormuz_frac * exposure * refiner_loss
+        # Direct supply loss from Hormuz closure
+        direct_loss = hormuz_frac * exposure * refiner_loss
 
-        # Substitution partially offsets loss — fraction of LOST supply that
-        # can be replaced from non-Hormuz sources. Ramps up over 12 weeks
-        # as new procurement contracts are established.
+        # Substitution partially offsets direct loss — fraction of LOST supply
+        # replaceable from non-Hormuz sources. Ramps up over 12 weeks.
         sub_fraction = substitution * min(1.0, absolute_week / 12)
-        net_loss = supply_loss * (1.0 - sub_fraction)
+        net_direct_loss = direct_loss * (1.0 - sub_fraction)
+
+        # Global stress multiplier: indirect effects that compound with time.
+        # The stress multiplier degrades the substitution effectiveness —
+        # the "alternatives" NZ is counting on are simultaneously under
+        # pressure from global competition, export bans, shipping crunch, etc.
+        global_stress = _interpolate(GLOBAL_STRESS_MULTIPLIER, absolute_week)
+
+        # Apply stress with commodity-specific sensitivity
+        # The multiplier amplifies the net loss, representing that alternatives
+        # are harder to secure than the base model assumes
+        effective_stress = 1.0 + (global_stress - 1.0) * stress_sensitivity
+        net_loss = min(1.0, net_direct_loss * effective_stress)  # cap at 100% loss
 
         # Apply seasonal demand multiplier
         effective_loss = net_loss * seasonal
@@ -205,7 +276,9 @@ def project_commodity(key: str, profile: dict, hormuz_frac: float,
         stock_weeks.append({
             "week": week,
             "stock_days": round(current_stock, 1),
-            "supply_loss_rate": round(net_loss, 4),
+            "direct_loss_rate": round(net_direct_loss, 4),
+            "global_stress": round(effective_stress, 2),
+            "effective_loss_rate": round(net_loss, 4),
         })
 
         # Critical threshold: 10% of initial stock

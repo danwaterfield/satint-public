@@ -89,6 +89,24 @@ REFINER_OUTPUT_LOSS = [
 # Constrained by port throughput, tanker scheduling, and terminal capacity.
 MAX_WEEKLY_RECOVERY = 1.0
 
+# Global stress multiplier — indirect effects that compound over time.
+# See pipeline/commodity_exposure.py for detailed channel descriptions.
+# Format: (multiplier, week) — 1.0 = no indirect effect
+# Fuel has stress_sensitivity of 1.4 (most competed-for globally)
+FUEL_STRESS_SENSITIVITY = 1.4
+GLOBAL_STRESS_MULTIPLIER = [
+    (1.0,  0),    # Week 0: buffers absorb
+    (1.05, 2),    # Week 2: shipping costs rising
+    (1.15, 4),    # Week 4: refinery competition visible
+    (1.35, 8),    # Week 8: substitution plans colliding globally
+    (1.60, 12),   # Week 12: freight rates 2x, export bans
+    (1.80, 16),   # Week 16: financial contagion
+    (2.00, 20),   # Week 20: alternatives largely exhausted
+    (2.20, 26),   # Week 26: structural degradation
+    (2.30, 36),   # Week 36: saturated
+    (2.30, 52),   # Week 52: new degraded equilibrium
+]
+
 
 # ---------------------------------------------------------------------------
 # Data classes
@@ -193,10 +211,18 @@ def project_scenario(state: CurrentState, scenario_key: str, scenario: dict,
         # refiners scramble for alternative crude. Loss fraction decays over time.
         refiner_loss = _interpolate(REFINER_OUTPUT_LOSS, week)
 
-        # Supply loss rate: physical supply actually lost to NZ
-        supply_loss = (hormuz_frac * NZ_HORMUZ_DEPENDENCY * refiner_loss
+        # Direct supply loss rate: physical supply lost to NZ
+        direct_loss = (hormuz_frac * NZ_HORMUZ_DEPENDENCY * refiner_loss
                        + bab_frac * NZ_BAB_DEPENDENCY * refiner_loss
                        + competition_frac)
+
+        # Global stress multiplier: indirect effects compound over time.
+        # Other countries competing for same alternatives, export bans,
+        # shipping crunch, financial contagion degrade NZ's ability to
+        # substitute away from Hormuz-dependent supply.
+        global_stress = _interpolate(GLOBAL_STRESS_MULTIPLIER, week)
+        effective_stress = 1.0 + (global_stress - 1.0) * FUEL_STRESS_SENSITIVITY
+        supply_loss = min(1.0, direct_loss * effective_stress)
 
         # Demand surge decays over time (panic buying → demand destruction)
         demand_surge = _demand_surge_at_week(state.avg_price_pct, elasticity, week)
