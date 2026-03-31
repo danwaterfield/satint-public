@@ -67,7 +67,9 @@ FUEL_TYPES = ["petrol", "diesel", "jet"]
 MSO_MINIMUMS = {"petrol": 28.0, "diesel": 21.0, "jet": 24.0}
 
 # NZ dependency fractions on chokepoints
-NZ_HORMUZ_DEPENDENCY = 0.40
+# Hormuz: 61.5% of refined petroleum imports are Hormuz-dependent
+# (Source: UN Comtrade 2024 — South Korea 70% Gulf crude, Singapore 65%)
+NZ_HORMUZ_DEPENDENCY = 0.62
 NZ_BAB_DEPENDENCY = 0.10
 
 

@@ -2417,7 +2417,7 @@ def calculate_fuel_security_indicator(self):
 
             # Depletion model — calibrated against MBIE actuals (Mar 15 2026)
             hormuz_disruption_frac = max(0, -avg_hormuz_pct / 100) if hormuz_commercial else 0
-            nz_hormuz_dependency = 0.40
+            nz_hormuz_dependency = 0.62  # UN Comtrade 2024: 61.5% of NZ refined petroleum imports Hormuz-dependent
             resupply_reduction = hormuz_disruption_frac * nz_hormuz_dependency
 
             # Demand surge multiplier: panic buying accelerates consumption
