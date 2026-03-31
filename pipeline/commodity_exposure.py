@@ -147,6 +147,94 @@ COMMODITY_PROFILES = {
              "gdp_exposure_pct": 2.5, "lag_weeks": 8},
         ],
     },
+    "pharmaceuticals": {
+        "label": "Pharmaceuticals (Medicaments)",
+        "hs_code": "3004",
+        "annual_import_usd": 962_273_643,
+        "hormuz_exposure_pct": 2.2,  # Low direct exposure
+        "top_sources": ["Germany (18%)", "USA (15%)", "Australia (12%)", "Ireland (8%)"],
+        # Pharmac holds ~3-6 months of most essential medicines.
+        # Hospital consumables (syringes, IV sets) hold 4-8 weeks.
+        "stock_days": 90,  # blended average for essential medicines
+        "seasonal_demand_multiplier": 1.0,
+        # Substitution: generic alternatives exist for most molecules.
+        # But API supply chain (India/China) is the bottleneck, not
+        # the finished product origin country.
+        "substitution_rate": 0.40,
+        "impact_lag_weeks": 4,
+        # CRITICAL: The real pharma risk is NOT direct Hormuz transit.
+        # It is: (a) Indian API supply disrupted by India's own energy crisis,
+        # (b) polypropylene packaging failure (syringes/IV bags) — modeled
+        # separately in polypropylene commodity, and
+        # (c) shipping delays for cold-chain biologics.
+        "downstream_effects": [
+            {"sector": "Hospitals", "mechanism": "Consumable shortages (syringes, IV sets via PP failure)",
+             "gdp_exposure_pct": 0.3, "lag_weeks": 2},
+            {"sector": "Primary care", "mechanism": "Generic medicine supply disruption (India API chain)",
+             "gdp_exposure_pct": 0.2, "lag_weeks": 8},
+            {"sector": "Chronic conditions", "mechanism": "Insulin, immunosuppressants, biologics shortage",
+             "gdp_exposure_pct": 0.4, "lag_weeks": 12},
+        ],
+    },
+    "medical_devices": {
+        "label": "Medical/Surgical Instruments",
+        "hs_code": "9018",
+        "annual_import_usd": 526_146_155,
+        "hormuz_exposure_pct": 5.9,
+        "top_sources": ["USA (30%)", "Germany (12%)", "Japan (8%)", "Ireland (7%)"],
+        # Hospitals hold 2-4 weeks of disposable surgical supplies,
+        # longer for capital equipment (not the immediate concern)
+        "stock_days": 21,
+        "seasonal_demand_multiplier": 1.0,
+        "substitution_rate": 0.20,  # medical devices are often sole-source / regulated
+        "impact_lag_weeks": 4,
+        "downstream_effects": [
+            {"sector": "Elective surgery", "mechanism": "Postponed due to instrument/implant shortage",
+             "gdp_exposure_pct": 0.1, "lag_weeks": 4},
+            {"sector": "Emergency surgery", "mechanism": "Rationing of single-use surgical instruments",
+             "gdp_exposure_pct": 0.2, "lag_weeks": 8},
+        ],
+    },
+    "surgical_gloves": {
+        "label": "Surgical/Exam Gloves",
+        "hs_code": "4015",
+        "annual_import_usd": 30_812_497,
+        "hormuz_exposure_pct": 8.3,
+        "top_sources": ["Malaysia (68%)", "Thailand (17%)", "China (8%)"],
+        # Hospitals hold 2-4 weeks. COVID taught NZ about glove fragility.
+        "stock_days": 21,
+        "seasonal_demand_multiplier": 1.0,
+        # Thailand (45% Gulf-crude-dependent) is #2 supplier. Malaysia less
+        # exposed but natural rubber supply chain depends on fuel for tapping/transport.
+        "substitution_rate": 0.30,
+        "impact_lag_weeks": 2,
+        "downstream_effects": [
+            {"sector": "Healthcare", "mechanism": "Infection control protocols degraded",
+             "gdp_exposure_pct": 0.1, "lag_weeks": 2},
+        ],
+    },
+    "blood_vaccines": {
+        "label": "Blood Products, Vaccines, Sera",
+        "hs_code": "3002",
+        "annual_import_usd": 328_307_751,
+        "hormuz_exposure_pct": 10.0,
+        "top_sources": ["Singapore (15%)", "USA (22%)", "Germany (14%)", "Australia (11%)"],
+        # Cold-chain products — shipping delays are lethal to product integrity.
+        # NZ blood service holds ~5 days of red cells, ~3 days of platelets.
+        # Vaccines: Pharmac schedules deliveries quarterly.
+        "stock_days": 45,  # blended (vaccines quarterly, blood products days)
+        "seasonal_demand_multiplier": 1.0,
+        # Cold chain sensitivity means delayed shipping = lost product.
+        # Singapore source (15% of imports) is at highest risk.
+        "substitution_rate": 0.25,
+        "impact_lag_weeks": 4,
+        "downstream_effects": [
+            {"sector": "Blood bank", "mechanism": "Cold-chain break → product spoilage, transfusion shortage",
+             "gdp_exposure_pct": 0.2, "lag_weeks": 4},
+            {"sector": "Immunisation", "mechanism": "Vaccine supply disruption → childhood schedule delays",
+             "gdp_exposure_pct": 0.1, "lag_weeks": 8},
+        ],
+    },
     "refined_petroleum": {
         "label": "Refined Petroleum",
         "hs_code": "2710",
@@ -228,10 +316,14 @@ COMMODITY_STRESS_SENSITIVITY = {
     "polyethylene": 1.2,          # High: petrochemical feedstock competition
     "polypropylene": 1.2,         # High: same feedstock competition
     "organic_chemicals": 1.0,     # Low: diversified sources, lower Hormuz exposure
-    "palm_kernel": 2.0,           # EXTREME: risk is Indonesian export ban, not Hormuz transit.
-                                  # Indonesia banned palm oil exports in 2022 (5 months duration).
-                                  # In a global food/energy crisis, export ban probability is very high.
-                                  # High stress sensitivity models this as a quasi-certain event.
+    "palm_kernel": 2.0,           # EXTREME: Indonesian export ban risk (precedent: 2022)
+    "pharmaceuticals": 1.5,       # High: Indian API supply chain disrupted by India's energy crisis.
+                                  # India produces ~60% of global generics, depends on Gulf energy.
+                                  # Plus PP packaging failure (syringes/IV bags) compounds.
+    "medical_devices": 1.3,       # Moderate-high: sole-source regulatory constraints limit substitution
+    "surgical_gloves": 1.2,       # Moderate: Malaysia/Thailand manufacturing fuel-dependent
+    "blood_vaccines": 1.6,        # High: cold-chain sensitivity means shipping delays = spoilage.
+                                  # Any disruption to air freight or refrigerated shipping is catastrophic.
     "refined_petroleum": 1.4,     # Highest non-ban: most fungible, most competed-for globally
 }
 
