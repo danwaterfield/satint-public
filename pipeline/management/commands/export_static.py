@@ -76,6 +76,7 @@ class Command(BaseCommand):
         self._export_fuel_security(out_dir)
         self._export_commercial_transits(out_dir)
         self._export_war_risk(out_dir)
+        self._export_commodity_exposure(out_dir)
 
         self.stdout.write(self.style.SUCCESS(f"Export complete → {out_dir}/"))
 
@@ -873,3 +874,28 @@ class Command(BaseCommand):
         ]
 
         self._write(os.path.join(out_dir, "war_risk_insurance.json"), result)
+
+    def _export_commodity_exposure(self, out_dir):
+        """NZ commodity exposure analysis across all Hormuz-dependent supply chains."""
+        from pipeline.commodity_exposure import run_commodity_exposure
+
+        # Get current Hormuz disruption from latest commercial transit data
+        latest_hormuz = (
+            CommercialTransit.objects.filter(chokepoint="hormuz")
+            .exclude(pct_change=None)
+            .order_by("-date")
+            .values_list("pct_change", flat=True)
+            .first()
+        )
+        hormuz_frac = max(0, -(latest_hormuz or 0) / 100)
+
+        try:
+            result = run_commodity_exposure(hormuz_frac=hormuz_frac)
+            # Strip week-by-week series to keep file size manageable
+            # (keep every 4th week instead of all 53)
+            for key, commodity in result.get("commodities", {}).items():
+                full_series = commodity.get("stock_series", [])
+                commodity["stock_series"] = [w for w in full_series if w["week"] % 4 == 0 or w["week"] == len(full_series) - 1]
+            self._write(os.path.join(out_dir, "commodity_exposure.json"), result)
+        except Exception as e:
+            self.stderr.write(f"  commodity exposure export failed: {e}")
