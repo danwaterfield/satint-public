@@ -877,7 +877,7 @@
   <div class="card">
     <div class="section-header">
       <span class="section-title">NZ Retail Fuel Prices</span>
-      <span class="section-meta">MBIE weekly + <a href="https://www.gaspy.nz/stats.html" target="_blank" rel="noopener">Gaspy</a> daily &bull; NZD per litre &bull; <span class="tip" data-tip="Prices include GST and excise duty. MBIE data is weekly; Gaspy provides daily NZ-average retail prices from 2,400+ stations. Import cost = refinery gate price in NZD.">adjusted retail price</span></span>
+      <span class="section-meta">MBIE weekly series + <a href="https://www.gaspy.nz/stats.html" target="_blank" rel="noopener">Gaspy</a> live snapshot &bull; NZD per litre &bull; <span class="tip" data-tip="Prices include GST and excise duty. The plotted series is MBIE weekly data; Gaspy is used as a same-day retail reference snapshot from its live station database. Import cost = refinery gate price in NZD.">adjusted retail price</span></span>
     </div>
     <div id="fuel-price-chart" style="height:320px;"></div>
     <p class="empty-state" id="fuel-price-empty" style="display:none">No fuel price data available. Use <code>python manage.py ingest_fuel_prices</code> to load MBIE CSV.</p>
@@ -2212,10 +2212,14 @@ function renderFuelSecurity(fuel) {
   var methExtra = document.getElementById('fuel-methodology-extra');
   if (methExtra && methodology.confidence_notes) {
     var cn = methodology.confidence_notes;
-    var parts = [];
-    if (cn.price_coverage) parts.push(cn.price_coverage);
-    if (cn.sar_observations) parts.push(cn.sar_observations);
-    if (parts.length) methExtra.textContent = ' Data coverage: ' + parts.join('. ') + '.';
+    var notes = [];
+    var coverage = [];
+    if (cn.price_coverage) coverage.push(cn.price_coverage);
+    if (cn.sar_observations) coverage.push(cn.sar_observations);
+    if (coverage.length) notes.push('Data coverage: ' + coverage.join('. ') + '.');
+    if (cn.price_model_input) notes.push(cn.price_model_input + '.');
+    if (cn.gaspy_reference) notes.push(cn.gaspy_reference + '.');
+    if (notes.length) methExtra.textContent = ' ' + notes.join(' ');
   }
 
   // Component bars

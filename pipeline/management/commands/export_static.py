@@ -689,6 +689,8 @@ class Command(BaseCommand):
         """NZ fuel security indicator, stock levels, and price trends."""
         from collections import defaultdict
 
+        from pipeline.clients.gaspy import fetch_gaspy_stats
+
         # Latest fuel security indicator
         latest_indicator = NZFuelSecurityIndicator.objects.order_by("-date").first()
 
@@ -767,6 +769,7 @@ class Command(BaseCommand):
 
         # Get latest stock date for staleness calculation
         latest_stock_date = FuelStockLevel.objects.aggregate(d=Max("date"))["d"]
+        gaspy_stats = fetch_gaspy_stats()
 
         # Model assumptions and confidence metadata
         methodology = {
@@ -790,7 +793,7 @@ class Command(BaseCommand):
                 "Price data from MBIE weekly monitoring — 1 week lag",
             ],
             "data_sources": {
-                "fuel_prices": "MBIE Weekly Fuel Price Monitoring (weekly CSV)",
+                "fuel_prices": "MBIE Weekly Fuel Price Monitoring (stored series) + Gaspy live daily stats (reference snapshot)",
                 "fuel_stocks": "MBIE Quarterly Oil Statistics (manual entry)",
                 "hormuz_traffic": "Sentinel-1 SAR vessel detection (2x/week)",
                 "nz_flights": "OpenSky ADS-B flight activity (daily)",
@@ -803,8 +806,36 @@ class Command(BaseCommand):
                 ),
                 "price_coverage": f"{sum(len(v) for v in price_data.values())} price observations across {len(price_data)} fuel types",
                 "sar_observations": f"{len(list(indicator_series))} security indicator calculations",
+                "price_model_input": "Composite risk currently scores MBIE weekly price observations; Gaspy is included as a same-day retail reference only",
             },
         }
+
+        if gaspy_stats:
+            gaspy_bits = []
+            for fuel_key in ("91", "diesel", "95"):
+                fuel_snapshot = gaspy_stats["averages"].get(fuel_key)
+                if not fuel_snapshot:
+                    continue
+                label = fuel_key.upper() if fuel_key != "diesel" else "diesel"
+                gaspy_bits.append(
+                    f"{label} ${fuel_snapshot['retail_price_nzd']:.3f}/L"
+                )
+
+            gaspy_note = f"Gaspy snapshot {gaspy_stats['updated']}: "
+            if gaspy_bits:
+                gaspy_note += ", ".join(gaspy_bits)
+            if gaspy_stats.get("station_count"):
+                gaspy_note += f" across {gaspy_stats['station_count']:,} stations"
+            if gaspy_stats.get("confirmations_last_7_days"):
+                gaspy_note += (
+                    f"; {gaspy_stats['confirmations_last_7_days']:,} price confirmations "
+                    "in the last 7 days"
+                )
+            methodology["confidence_notes"]["gaspy_reference"] = gaspy_note
+        else:
+            methodology["confidence_notes"]["gaspy_reference"] = (
+                "Gaspy live reference unavailable during export"
+            )
 
         # Scenario projections (extracted from depletion_projections if present)
         scenarios_data = None
@@ -817,6 +848,7 @@ class Command(BaseCommand):
             "scenarios": scenarios_data,
             "stocks": dict(stock_data),
             "prices": dict(price_data),
+            "live_price_reference": gaspy_stats,
             "methodology": methodology,
         }
 
