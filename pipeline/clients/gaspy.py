@@ -9,6 +9,7 @@ same-day NZ retail price reference without scraping rendered HTML.
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 
 import requests
 
@@ -69,6 +70,26 @@ def fetch_gaspy_stats(timeout: int = 20) -> dict | None:
     datamine = payload.get("datamine") or {}
     gaspy = payload.get("gaspy") or {}
     averages = {}
+    updated = datamine.get("Updated")
+    as_of_date = None
+    as_of_timestamp = None
+
+    if updated:
+        try:
+            as_of_date = datetime.strptime(updated, "%d %b %Y @ %I:%M%p").date().isoformat()
+        except ValueError:
+            logger.warning("Could not parse Gaspy Updated field: %r", updated)
+
+    timestamp_ms = gaspy.get("timestamp")
+    if timestamp_ms:
+        try:
+            as_of_timestamp = datetime.fromtimestamp(
+                float(timestamp_ms) / 1000.0, tz=timezone.utc
+            ).isoformat()
+            if as_of_date is None:
+                as_of_date = as_of_timestamp[:10]
+        except (ValueError, OSError, TypeError):
+            logger.warning("Could not parse Gaspy timestamp: %r", timestamp_ms)
 
     for raw_key, normalized_key in _AVERAGE_KEY_MAP.items():
         item = (datamine.get("Averages") or {}).get(raw_key)
@@ -84,7 +105,9 @@ def fetch_gaspy_stats(timeout: int = 20) -> dict | None:
         }
 
     result = {
-        "updated": datamine.get("Updated"),
+        "updated": updated,
+        "as_of_date": as_of_date,
+        "as_of_timestamp": as_of_timestamp,
         "station_count": datamine.get("StationCount"),
         "brand_count": datamine.get("BrandCount"),
         "confirmations_last_7_days": datamine.get("PriceConfirmationsInLast7Days"),

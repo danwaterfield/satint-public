@@ -690,6 +690,7 @@ class Command(BaseCommand):
         from collections import defaultdict
 
         from pipeline.clients.gaspy import fetch_gaspy_stats
+        from pipeline.clients.upstream_market import fetch_upstream_market_reference
 
         # Latest fuel security indicator
         latest_indicator = NZFuelSecurityIndicator.objects.order_by("-date").first()
@@ -770,6 +771,7 @@ class Command(BaseCommand):
         # Get latest stock date for staleness calculation
         latest_stock_date = FuelStockLevel.objects.aggregate(d=Max("date"))["d"]
         gaspy_stats = fetch_gaspy_stats()
+        upstream_market = fetch_upstream_market_reference()
 
         # Model assumptions and confidence metadata
         methodology = {
@@ -796,6 +798,7 @@ class Command(BaseCommand):
                 "fuel_prices": "MBIE Weekly Fuel Price Monitoring (stored series) + Gaspy live daily stats (reference snapshot)",
                 "fuel_stocks": "MBIE Quarterly Oil Statistics (manual entry)",
                 "hormuz_traffic": "Sentinel-1 SAR vessel detection (2x/week)",
+                "upstream_market": "Yahoo Finance daily futures and FX (reference series)",
                 "nz_flights": "OpenSky ADS-B flight activity (daily)",
                 "gdelt_events": "GDELT Project crisis event monitoring (6-hourly)",
             },
@@ -837,6 +840,26 @@ class Command(BaseCommand):
                 "Gaspy live reference unavailable during export"
             )
 
+        if upstream_market and upstream_market.get("latest"):
+            latest = upstream_market["latest"]
+            latest_bits = []
+            for key, label in (
+                ("brent_crude", "Brent"),
+                ("heating_oil_futures", "Heating Oil"),
+                ("rbob_gasoline_futures", "RBOB"),
+                ("nzdusd", "FX"),
+            ):
+                if latest.get(key):
+                    latest_bits.append(f"{label} {latest[key]}")
+            if latest_bits:
+                methodology["confidence_notes"]["upstream_reference"] = (
+                    "Upstream reference latest: " + ", ".join(latest_bits)
+                )
+        else:
+            methodology["confidence_notes"]["upstream_reference"] = (
+                "Upstream market reference unavailable during export"
+            )
+
         # Scenario projections (extracted from depletion_projections if present)
         scenarios_data = None
         if latest_indicator and latest_indicator.depletion_projections:
@@ -849,6 +872,7 @@ class Command(BaseCommand):
             "stocks": dict(stock_data),
             "prices": dict(price_data),
             "live_price_reference": gaspy_stats,
+            "upstream": upstream_market,
             "methodology": methodology,
         }
 

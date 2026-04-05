@@ -1006,6 +1006,13 @@ function el(tag, attrs, text) {
 
 function setText(id, v) { var e = document.getElementById(id); if (e) e.textContent = String(v); }
 
+function setEmptyState(id, text) {
+  var e = document.getElementById(id);
+  if (!e) return;
+  e.textContent = '';
+  e.appendChild(el('p', { class: 'empty-state', style: 'padding-top:120px' }, text));
+}
+
 function pctSpan(v) {
   var s = el('span');
   if (v == null) { s.textContent = '\u2014'; s.className = 'pct-neu'; return s; }
@@ -2256,9 +2263,12 @@ function renderFuelSecurity(fuel) {
     var traces = [];
     var priceLabels = { '91': 'Regular 91', '95': 'Premium 95', 'diesel': 'Diesel' };
     var priceColors = { '91': '#3182ce', '95': '#6b46c1', 'diesel': '#e53e3e' };
+    var latestVisibleFuelDate = '2026-04-01';
     Object.keys(priceLabels).forEach(function (ft2) {
       var series2 = prices[ft2];
       if (!series2 || !series2.length) return;
+      var latestSeriesDate = series2[series2.length - 1].date;
+      if (latestSeriesDate > latestVisibleFuelDate) latestVisibleFuelDate = latestSeriesDate;
       // Retail price trace
       traces.push({
         x: series2.map(function (p2) { return p2.date; }),
@@ -2284,12 +2294,39 @@ function renderFuelSecurity(fuel) {
         });
       }
     });
+
+    var gaspy = fuel.live_price_reference || {};
+    if (gaspy.as_of_date && gaspy.averages) {
+      if (gaspy.as_of_date > latestVisibleFuelDate) latestVisibleFuelDate = gaspy.as_of_date;
+      Object.keys(priceLabels).forEach(function (ft3) {
+        var snap = gaspy.averages[ft3];
+        if (!snap || snap.retail_price_nzd == null) return;
+        traces.push({
+          x: [gaspy.as_of_date],
+          y: [snap.retail_price_nzd],
+          name: priceLabels[ft3] + ' (Gaspy live)',
+          type: 'scatter',
+          mode: 'markers',
+          marker: {
+            color: priceColors[ft3],
+            size: 10,
+            symbol: 'diamond-open',
+            line: { color: priceColors[ft3], width: 2 },
+          },
+          hovertemplate:
+            '<b>' + priceLabels[ft3] + ' Gaspy live</b><br>$%{y:.3f}/L<br>' +
+            gaspy.updated +
+            '<extra></extra>',
+        });
+      });
+    }
+
     if (traces.length) {
       Plotly.newPlot('fuel-price-chart', traces, {
         margin: { t: 10, r: 20, b: 60, l: 50 },
         xaxis: {
           title: '', gridcolor: '#edf2f7',
-          range: ['2025-01-01', '2026-04-01'],
+          range: ['2025-01-01', latestVisibleFuelDate],
           rangeslider: { visible: true, thickness: 0.08 },
           rangeselector: {
             buttons: [
@@ -2570,7 +2607,11 @@ function renderFuelHormuzChart(sar) {
 // ── Upstream market indicators ────────────────────────────────────────────
 function renderUpstreamIndicators(fuel) {
   var up = fuel.upstream;
-  if (!up) return;
+  if (!up) {
+    setEmptyState('upstream-price-chart', 'Upstream market data unavailable in current export');
+    setEmptyState('upstream-fx-chart', 'FX reference data unavailable in current export');
+    return;
+  }
 
   var baselines = up.baselines || {};
   var warLine = '2026-02-28';
@@ -2666,6 +2707,8 @@ function renderUpstreamIndicators(fuel) {
       legend: { orientation: 'h', y: 1.15, font: { size: 10 } },
     });
     Plotly.newPlot('upstream-price-chart', traces, layout, { responsive: true, displayModeBar: false });
+  } else {
+    setEmptyState('upstream-price-chart', 'No upstream commodity benchmark data available');
   }
 
   // ── Right chart: NZD/USD exchange rate ──
@@ -2673,11 +2716,11 @@ function renderUpstreamIndicators(fuel) {
     var fxTraces = [{
       x: up.nzdusd.map(function (d) { return d.date; }),
       y: up.nzdusd.map(function (d) { return d.rate; }),
-      name: 'NZD/USD',
+      name: 'NZD per USD',
       type: 'scatter', mode: 'lines',
       line: { color: '#0d9488', width: 2 },
       fill: 'tozeroy', fillcolor: 'rgba(13,148,136,0.08)',
-      hovertemplate: '<b>NZD/USD</b> %{y:.4f}<extra></extra>',
+      hovertemplate: '<b>NZD per USD</b> %{y:.4f}<extra></extra>',
     }];
     if (baselines.nzdusd) {
       fxTraces.push({
@@ -2694,6 +2737,8 @@ function renderUpstreamIndicators(fuel) {
       legend: { orientation: 'h', y: 1.15, font: { size: 10 } },
     });
     Plotly.newPlot('upstream-fx-chart', fxTraces, fxLayout, { responsive: true, displayModeBar: false });
+  } else {
+    setEmptyState('upstream-fx-chart', 'No FX reference data available');
   }
 }
 
@@ -2789,8 +2834,17 @@ window.switchTab = function switchTab(tab) {
 
 // Bind click handlers from JS instead of inline onclick
 document.querySelectorAll('.tab-btn[data-tab]').forEach(function (btn) {
-  btn.addEventListener('click', function () { window.switchTab(btn.getAttribute('data-tab')); });
+  btn.addEventListener('click', function () {
+    var tab = btn.getAttribute('data-tab');
+    window.switchTab(tab);
+    if (window.location.hash !== '#' + tab) window.location.hash = tab;
+  });
 });
+
+var initialTab = window.location.hash ? window.location.hash.slice(1) : '';
+if (initialTab && document.getElementById('tab-' + initialTab)) {
+  window.switchTab(initialTab);
+}
 
 }());
 </script>
