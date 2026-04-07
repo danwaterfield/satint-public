@@ -251,11 +251,13 @@
   .staleness-fresh { background: var(--green-lt); color: var(--green); }
   .staleness-stale { background: var(--amber-lt); color: var(--amber); }
   .staleness-very-stale { background: var(--red-lt); color: var(--red); }
+  .supply-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
 
   @media (max-width: 900px) {
     .summary-row { grid-template-columns: 1fr 1fr; }
     .two-col { grid-template-columns: 1fr; }
     .risk-grid { grid-template-columns: 1fr 1fr; }
+    .supply-grid { grid-template-columns: 1fr; }
   }
 
   @media (max-width: 768px) {
@@ -845,7 +847,7 @@
       <div style="flex:1;">
         <p style="font-size:12px;color:var(--slate-lt);line-height:1.6;" id="fuel-context">
           New Zealand closed its only refinery (Marsden Point) in 2022. The country is 100% dependent on imported refined fuel,
-          with ~40% sourced from refineries dependent on crude transiting the Strait of Hormuz.
+          with roughly 60% sourced from refineries dependent on crude transiting the Strait of Hormuz.
         </p>
       </div>
     </div>
@@ -892,6 +894,36 @@
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
       <div id="upstream-price-chart" style="height:300px;"></div>
       <div id="upstream-fx-chart" style="height:300px;"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="section-header">
+      <span class="section-title tip" data-tip="Domestic reference layer from freely available public sources. Retail basket = anonymous Woolworths public product search results (not store-specific). Port schedules = current Auckland and Tauranga vessel pages. These are reference signals for catalog depth, stock state, and inbound logistics, not direct stockholding disclosures.">Domestic Supply Chain Signals</span>
+      <span class="section-meta">Woolworths NZ public basket + Auckland / Tauranga vessel schedules</span>
+    </div>
+    <div class="fuel-cards" id="domestic-supply-summary">
+      <p class="empty-state" style="grid-column:1/-1">Loading domestic supply-chain reference data…</p>
+    </div>
+    <div class="supply-grid">
+      <div class="table-wrap">
+        <table class="cascade-table">
+          <caption class="sr-only">Retail basket probe summary</caption>
+          <thead><tr><th scope="col">Probe</th><th scope="col" style="text-align:right">Products</th><th scope="col" style="text-align:right">Avail.</th><th scope="col" style="text-align:right">Low stock</th><th scope="col" style="text-align:right">Min $</th></tr></thead>
+          <tbody id="retail-probe-tbody">
+            <tr><td colspan="5" class="empty-state">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="table-wrap">
+        <table class="cascade-table">
+          <caption class="sr-only">Port schedule summary</caption>
+          <thead><tr><th scope="col">Port / Schedule</th><th scope="col" style="text-align:right">Vessels</th><th scope="col" style="text-align:right">Containers</th><th scope="col" style="text-align:right">Fuel/Chem</th></tr></thead>
+          <tbody id="port-signal-tbody">
+            <tr><td colspan="4" class="empty-state">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 
@@ -959,7 +991,7 @@
   <!-- Methodology & Assumptions -->
   <div class="fuel-methodology" id="fuel-methodology">
     <strong>Model assumptions &amp; limitations:</strong>
-    NZ imports ~40% of refined fuel from refineries dependent on crude transiting the Strait of Hormuz (configurable parameter).
+    NZ imports roughly 60% of refined fuel from refineries dependent on crude transiting the Strait of Hormuz (live model parameter: 61.5% / 0.62).
     Depletion model assumes linear consumption at current rates and constant Hormuz disruption fraction.
     Stock data from MBIE quarterly reports may be up to 90 days stale — projected onshore stock adjusts for elapsed days.
     Cape of Good Hope rerouting (+14 days transit) applied when Hormuz disruption exceeds 30%.
@@ -972,7 +1004,7 @@
 </main>
 
 <footer class="footer">
-  <span>Data: NASA FIRMS &bull; NASA Black Marble VNP46A2 &bull; VIIRS DNB L1B &bull; Sentinel-1 SAR via ASF DAAC &bull; IODA / Georgia Tech &bull; MBIE NZ Fuel Monitoring &bull; Open-source humanitarian monitoring</span>
+  <span>Data: NASA FIRMS &bull; NASA Black Marble VNP46A2 &bull; VIIRS DNB L1B &bull; Sentinel-1 SAR via ASF DAAC &bull; IODA / Georgia Tech &bull; MBIE NZ Fuel Monitoring &bull; Woolworths NZ public basket &bull; POAL / Port of Tauranga schedules</span>
   <span id="footer-right">Baseline period: 15 Jan – 27 Feb 2026</span>
 </footer>
 
@@ -2226,6 +2258,8 @@ function renderFuelSecurity(fuel) {
     if (coverage.length) notes.push('Data coverage: ' + coverage.join('. ') + '.');
     if (cn.price_model_input) notes.push(cn.price_model_input + '.');
     if (cn.gaspy_reference) notes.push(cn.gaspy_reference + '.');
+    if (cn.retail_reference) notes.push(cn.retail_reference + '.');
+    if (cn.port_reference) notes.push(cn.port_reference + '.');
     if (notes.length) methExtra.textContent = ' ' + notes.join(' ');
   }
 
@@ -2410,6 +2444,92 @@ function renderFuelSecurity(fuel) {
         card2.appendChild(el('div', { class: 'effect-detail' }, 'Trigger: ' + eff.trigger_industry + ' impact'));
       }
       effectsEl.appendChild(card2);
+    });
+  }
+
+  renderDomesticSupplyChain(fuel);
+}
+
+function renderDomesticSupplyChain(fuel) {
+  var ds = fuel.domestic_supply_chain || {};
+  var retail = ds.retail || {};
+  var ports = ds.ports || {};
+
+  var summaryEl = document.getElementById('domestic-supply-summary');
+  var retailTbody = document.getElementById('retail-probe-tbody');
+  var portTbody = document.getElementById('port-signal-tbody');
+  if (!summaryEl || !retailTbody || !portTbody) return;
+
+  summaryEl.textContent = '';
+  retailTbody.textContent = '';
+  portTbody.textContent = '';
+
+  var retailOverall = retail.overall || {};
+  var portsOverall = ports.overall || {};
+  var hasRetail = !!retailOverall.product_count;
+  var hasPorts = !!portsOverall.schedule_groups;
+
+  if (!hasRetail && !hasPorts) {
+    summaryEl.appendChild(el('p', { class: 'empty-state', style: 'grid-column:1/-1' }, 'Domestic supply-chain reference data unavailable in current export.'));
+    retailTbody.appendChild(el('tr')).appendChild(el('td', { colspan: '5', class: 'empty-state' }, 'No retail basket data available.'));
+    portTbody.appendChild(el('tr')).appendChild(el('td', { colspan: '4', class: 'empty-state' }, 'No port schedule data available.'));
+    return;
+  }
+
+  var retailCard = el('div', { class: 'fuel-card' });
+  retailCard.appendChild(el('div', { class: 'fuel-card-type' }, 'Retail basket'));
+  retailCard.appendChild(el('div', { style: 'font-family:var(--font-mono);font-size:24px;font-weight:600;color:' + ((retailOverall.availability_ratio || 0) < 0.9 ? 'var(--amber)' : 'var(--green)') }, hasRetail ? (retailOverall.availability_ratio * 100).toFixed(0) + '%' : '—'));
+  retailCard.appendChild(el('div', { style: 'font-size:11px;color:var(--slate-lt);margin-top:4px' }, hasRetail ? 'availability across ' + retailOverall.query_count + ' probes' : 'No retail data'));
+  if (retail.updated_at) retailCard.appendChild(el('div', { style: 'font-size:10px;color:var(--slate-lt);margin-top:6px' }, 'Updated: ' + retail.updated_at));
+  summaryEl.appendChild(retailCard);
+
+  var basketCard = el('div', { class: 'fuel-card' });
+  basketCard.appendChild(el('div', { class: 'fuel-card-type' }, 'Basket floor'));
+  basketCard.appendChild(el('div', { style: 'font-family:var(--font-mono);font-size:24px;font-weight:600' }, hasRetail && retailOverall.basket_floor_nzd != null ? '$' + retailOverall.basket_floor_nzd.toFixed(2) : '—'));
+  basketCard.appendChild(el('div', { style: 'font-size:11px;color:var(--slate-lt);margin-top:4px' }, hasRetail ? (retailOverall.low_stock_count || 0) + ' low-stock products in latest basket' : 'No retail data'));
+  summaryEl.appendChild(basketCard);
+
+  var portCard = el('div', { class: 'fuel-card' });
+  portCard.appendChild(el('div', { class: 'fuel-card-type' }, 'Port activity'));
+  portCard.appendChild(el('div', { style: 'font-family:var(--font-mono);font-size:24px;font-weight:600;color:' + ((portsOverall.container_calls || 0) < 6 ? 'var(--amber)' : 'var(--text)') }, hasPorts ? String(portsOverall.container_calls || 0) : '—'));
+  portCard.appendChild(el('div', { style: 'font-size:11px;color:var(--slate-lt);margin-top:4px' }, hasPorts ? 'container-linked calls in latest schedule snapshot' : 'No port data'));
+  if (ports.updated_at) portCard.appendChild(el('div', { style: 'font-size:10px;color:var(--slate-lt);margin-top:6px' }, 'Updated: ' + ports.updated_at));
+  summaryEl.appendChild(portCard);
+
+  var retailRows = (retail.queries || []).slice().sort(function (a, b) {
+    var ar = typeof a.availability_ratio === 'number' ? a.availability_ratio : 1;
+    var br = typeof b.availability_ratio === 'number' ? b.availability_ratio : 1;
+    if (ar !== br) return ar - br;
+    return (b.low_stock_count || 0) - (a.low_stock_count || 0);
+  });
+  if (!retailRows.length) {
+    retailTbody.appendChild(el('tr')).appendChild(el('td', { colspan: '5', class: 'empty-state' }, 'No retail basket data available.'));
+  } else {
+    retailRows.forEach(function (row) {
+      var tr = el('tr');
+      if ((row.availability_ratio || 1) < 0.95 || (row.low_stock_count || 0) > 0) tr.className = 'imminent';
+      tr.appendChild(el('td', { style: 'font-weight:500' }, row.label));
+      tr.appendChild(el('td', { style: 'text-align:right;font-family:var(--font-mono)' }, String(row.product_count || 0)));
+      tr.appendChild(el('td', { style: 'text-align:right;font-family:var(--font-mono)' }, row.availability_ratio != null ? (row.availability_ratio * 100).toFixed(0) + '%' : '—'));
+      tr.appendChild(el('td', { style: 'text-align:right;font-family:var(--font-mono)' }, String(row.low_stock_count || 0)));
+      tr.appendChild(el('td', { style: 'text-align:right;font-family:var(--font-mono)' }, row.min_price_nzd != null ? '$' + row.min_price_nzd.toFixed(2) : '—'));
+      retailTbody.appendChild(tr);
+    });
+  }
+
+  var portRows = (ports.schedules || []);
+  if (!portRows.length) {
+    portTbody.appendChild(el('tr')).appendChild(el('td', { colspan: '4', class: 'empty-state' }, 'No port schedule data available.'));
+  } else {
+    portRows.forEach(function (row) {
+      var tr = el('tr');
+      if ((row.container_calls || 0) < 2 && row.schedule_type === 'expected_arrival') tr.className = 'imminent';
+      var label = row.port_name + ' — ' + row.schedule_type.replace(/_/g, ' ');
+      tr.appendChild(el('td', { style: 'font-weight:500' }, label));
+      tr.appendChild(el('td', { style: 'text-align:right;font-family:var(--font-mono)' }, String(row.vessel_count || 0)));
+      tr.appendChild(el('td', { style: 'text-align:right;font-family:var(--font-mono)' }, String(row.container_calls || 0)));
+      tr.appendChild(el('td', { style: 'text-align:right;font-family:var(--font-mono)' }, String(row.fuel_related_calls || 0)));
+      portTbody.appendChild(tr);
     });
   }
 }
