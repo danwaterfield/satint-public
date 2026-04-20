@@ -8,6 +8,9 @@ publicly accessible sources that do not require paid API access.
 - `Woolworths NZ` anonymous public product search API
   - Captures a daily essential-goods basket across fixed probes such as milk,
     bread, eggs, rice, infant formula, paracetamol, and toilet paper.
+  - Also captures a deterministic exact-item reference basket
+    (for example `Fresh milk (2L)`, `Rice (1kg)`, `Paracetamol 500mg tablets`)
+    so price and availability can be tracked on a like-for-like basis.
   - Stored in `RetailProductSnapshot`.
   - Exported in `docs/data/nz_supply_chain.json` and embedded in
     `docs/data/fuel_security.json`.
@@ -39,7 +42,8 @@ publicly accessible sources that do not require paid API access.
   - The signal is best read as catalog depth and coarse stock state, not a
     confirmed per-store shelf-out dataset.
   - It is still useful for time-series changes in basket depth, low-stock
-    frequency, and entry-price movement.
+    frequency, exact-basket price movement, and the disappearance of named
+    staple items from the national catalog.
 
 - Foodstuffs properties (`New World`, `PAK'nSAVE`) were not added in this pass.
   - Their public sites are Cloudflare-protected against straightforward scripted

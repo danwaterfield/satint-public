@@ -899,8 +899,8 @@
 
   <div class="card">
     <div class="section-header">
-      <span class="section-title tip" data-tip="Domestic reference layer from freely available public sources. Retail basket = anonymous Woolworths public product search results (not store-specific). Port schedules = current Auckland and Tauranga vessel pages. These are reference signals for catalog depth, stock state, and inbound logistics, not direct stockholding disclosures.">Domestic Supply Chain Signals</span>
-      <span class="section-meta">Woolworths NZ public basket + Auckland / Tauranga vessel schedules</span>
+      <span class="section-title tip" data-tip="Domestic reference layer from freely available public sources. Retail basket = anonymous Woolworths public product search results (not store-specific). This now includes both broad catalog probes and an exact staple basket, so we can separate catalog depth from named-item continuity. Port schedules = current Auckland and Tauranga vessel pages. These are reference signals for catalog depth, stock state, and inbound logistics, not direct stockholding disclosures.">Domestic Supply Chain Signals</span>
+      <span class="section-meta">Woolworths NZ catalog + exact basket + Auckland / Tauranga vessel schedules</span>
     </div>
     <div class="fuel-cards" id="domestic-supply-summary">
       <p class="empty-state" style="grid-column:1/-1">Loading domestic supply-chain reference data…</p>
@@ -921,6 +921,15 @@
           <thead><tr><th scope="col">Port / Schedule</th><th scope="col" style="text-align:right">Vessels</th><th scope="col" style="text-align:right">Containers</th><th scope="col" style="text-align:right">Fuel/Chem</th></tr></thead>
           <tbody id="port-signal-tbody">
             <tr><td colspan="4" class="empty-state">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="table-wrap" style="grid-column:1/-1">
+        <table class="cascade-table">
+          <caption class="sr-only">Exact retail basket item summary</caption>
+          <thead><tr><th scope="col">Basket item</th><th scope="col">Matched product</th><th scope="col" style="text-align:right">Avail.</th><th scope="col" style="text-align:right">Stock</th><th scope="col" style="text-align:right">Price</th><th scope="col" style="text-align:right">Match</th></tr></thead>
+          <tbody id="retail-basket-item-tbody">
+            <tr><td colspan="6" class="empty-state">Loading…</td></tr>
           </tbody>
         </table>
       </div>
@@ -2454,39 +2463,46 @@ function renderDomesticSupplyChain(fuel) {
   var ds = fuel.domestic_supply_chain || {};
   var retail = ds.retail || {};
   var ports = ds.ports || {};
+  var referenceBasket = retail.reference_basket || {};
 
   var summaryEl = document.getElementById('domestic-supply-summary');
   var retailTbody = document.getElementById('retail-probe-tbody');
   var portTbody = document.getElementById('port-signal-tbody');
-  if (!summaryEl || !retailTbody || !portTbody) return;
+  var basketTbody = document.getElementById('retail-basket-item-tbody');
+  if (!summaryEl || !retailTbody || !portTbody || !basketTbody) return;
 
   summaryEl.textContent = '';
   retailTbody.textContent = '';
   portTbody.textContent = '';
+  basketTbody.textContent = '';
 
   var retailOverall = retail.overall || {};
+  var basketOverall = referenceBasket.overall || {};
   var portsOverall = ports.overall || {};
   var hasRetail = !!retailOverall.product_count;
+  var hasReference = !!basketOverall.item_count;
   var hasPorts = !!portsOverall.schedule_groups;
 
-  if (!hasRetail && !hasPorts) {
+  if (!hasRetail && !hasReference && !hasPorts) {
     summaryEl.appendChild(el('p', { class: 'empty-state', style: 'grid-column:1/-1' }, 'Domestic supply-chain reference data unavailable in current export.'));
     retailTbody.appendChild(el('tr')).appendChild(el('td', { colspan: '5', class: 'empty-state' }, 'No retail basket data available.'));
     portTbody.appendChild(el('tr')).appendChild(el('td', { colspan: '4', class: 'empty-state' }, 'No port schedule data available.'));
+    basketTbody.appendChild(el('tr')).appendChild(el('td', { colspan: '6', class: 'empty-state' }, 'No exact basket data available.'));
     return;
   }
 
   var retailCard = el('div', { class: 'fuel-card' });
-  retailCard.appendChild(el('div', { class: 'fuel-card-type' }, 'Retail basket'));
+  retailCard.appendChild(el('div', { class: 'fuel-card-type' }, 'Catalog depth'));
   retailCard.appendChild(el('div', { style: 'font-family:var(--font-mono);font-size:24px;font-weight:600;color:' + ((retailOverall.availability_ratio || 0) < 0.9 ? 'var(--amber)' : 'var(--green)') }, hasRetail ? (retailOverall.availability_ratio * 100).toFixed(0) + '%' : '—'));
   retailCard.appendChild(el('div', { style: 'font-size:11px;color:var(--slate-lt);margin-top:4px' }, hasRetail ? 'availability across ' + retailOverall.query_count + ' probes' : 'No retail data'));
   if (retail.updated_at) retailCard.appendChild(el('div', { style: 'font-size:10px;color:var(--slate-lt);margin-top:6px' }, 'Updated: ' + retail.updated_at));
   summaryEl.appendChild(retailCard);
 
   var basketCard = el('div', { class: 'fuel-card' });
-  basketCard.appendChild(el('div', { class: 'fuel-card-type' }, 'Basket floor'));
-  basketCard.appendChild(el('div', { style: 'font-family:var(--font-mono);font-size:24px;font-weight:600' }, hasRetail && retailOverall.basket_floor_nzd != null ? '$' + retailOverall.basket_floor_nzd.toFixed(2) : '—'));
-  basketCard.appendChild(el('div', { style: 'font-size:11px;color:var(--slate-lt);margin-top:4px' }, hasRetail ? (retailOverall.low_stock_count || 0) + ' low-stock products in latest basket' : 'No retail data'));
+  basketCard.appendChild(el('div', { class: 'fuel-card-type' }, 'Exact basket total'));
+  basketCard.appendChild(el('div', { style: 'font-family:var(--font-mono);font-size:24px;font-weight:600;color:' + ((basketOverall.availability_ratio || 0) < 0.85 ? 'var(--amber)' : 'var(--text)') }, hasReference && basketOverall.basket_total_nzd != null ? '$' + basketOverall.basket_total_nzd.toFixed(2) : '—'));
+  basketCard.appendChild(el('div', { style: 'font-size:11px;color:var(--slate-lt);margin-top:4px' }, hasReference ? (basketOverall.matched_count || 0) + '/' + basketOverall.item_count + ' named items matched; ' + (basketOverall.low_stock_count || 0) + ' low-stock items' : 'No exact basket data'));
+  if (referenceBasket.updated_at) basketCard.appendChild(el('div', { style: 'font-size:10px;color:var(--slate-lt);margin-top:6px' }, 'Updated: ' + referenceBasket.updated_at));
   summaryEl.appendChild(basketCard);
 
   var portCard = el('div', { class: 'fuel-card' });
@@ -2514,6 +2530,24 @@ function renderDomesticSupplyChain(fuel) {
       tr.appendChild(el('td', { style: 'text-align:right;font-family:var(--font-mono)' }, String(row.low_stock_count || 0)));
       tr.appendChild(el('td', { style: 'text-align:right;font-family:var(--font-mono)' }, row.min_price_nzd != null ? '$' + row.min_price_nzd.toFixed(2) : '—'));
       retailTbody.appendChild(tr);
+    });
+  }
+
+  var basketRows = (referenceBasket.items || []);
+  if (!basketRows.length) {
+    basketTbody.appendChild(el('tr')).appendChild(el('td', { colspan: '6', class: 'empty-state' }, 'No exact basket data available.'));
+  } else {
+    basketRows.forEach(function (row) {
+      var tr = el('tr');
+      var stockLevel = row.stock_level == null ? null : row.stock_level;
+      if (!row.matched || !row.is_available || (stockLevel != null && stockLevel <= 1)) tr.className = 'imminent';
+      tr.appendChild(el('td', { style: 'font-weight:500' }, row.label));
+      tr.appendChild(el('td', null, row.matched ? (row.brand ? row.brand + ' — ' : '') + (row.product_name || 'Matched product') : 'No confident match'));
+      tr.appendChild(el('td', { style: 'text-align:right;font-family:var(--font-mono)' }, row.matched ? (row.is_available ? 'Yes' : 'No') : '—'));
+      tr.appendChild(el('td', { style: 'text-align:right;font-family:var(--font-mono)' }, stockLevel != null ? String(stockLevel) : '—'));
+      tr.appendChild(el('td', { style: 'text-align:right;font-family:var(--font-mono)' }, row.price_nzd != null ? '$' + row.price_nzd.toFixed(2) : '—'));
+      tr.appendChild(el('td', { style: 'text-align:right;font-family:var(--font-mono)' }, row.match_confidence != null ? (row.match_confidence * 100).toFixed(0) + '%' : '—'));
+      basketTbody.appendChild(tr);
     });
   }
 
