@@ -132,6 +132,7 @@
   }
   #nightlight-chart { height: 260px; }
   #internet-chart { height: 260px; }
+  #vegetation-chart { height: 300px; }
   #fire-map { height: 400px; border-radius: var(--radius); }
   .js-plotly-plot { max-width: 100%; overflow: hidden; }
   .plot-container, .svg-container { max-width: 100% !important; }
@@ -455,6 +456,44 @@
     </div>
   </div>
 
+  <!-- Agricultural vegetation / NDVI -->
+  <div class="card">
+    <div class="section-header">
+      <span class="section-title">Agricultural Vegetation Stress</span>
+      <span class="section-meta" id="vegetation-freshness">HLS/Sentinel-derived NDVI vs same-season baseline</span>
+    </div>
+    <div id="vegetation-summary" class="stat-sub" style="margin-bottom:12px;color:var(--slate-lt);"></div>
+    <div class="two-col">
+      <div>
+        <div class="table-wrap">
+        <table>
+          <caption class="sr-only">Agricultural NDVI observations by region</caption>
+          <thead>
+            <tr>
+              <th scope="col">Region</th>
+              <th scope="col">Country</th>
+              <th scope="col" style="text-align:right">NDVI</th>
+              <th scope="col" style="text-align:right">vs Baseline</th>
+              <th scope="col" style="text-align:right">Cloud</th>
+              <th scope="col">Confidence</th>
+            </tr>
+          </thead>
+          <tbody id="vegetation-tbody">
+            <tr><td colspan="6" class="empty-state">Loading…</td></tr>
+          </tbody>
+        </table>
+        </div>
+      </div>
+      <div>
+        <div class="chart-controls">
+          <label for="vegetation-region-select">Region</label>
+          <select id="vegetation-region-select" class="ctrl-select"></select>
+        </div>
+        <div id="vegetation-chart"></div>
+      </div>
+    </div>
+  </div>
+
   <!-- Vessel table + Fire map -->
   <div class="two-col">
     <div class="card">
@@ -677,6 +716,7 @@
           <tr><td>NASA Black Marble VNP46A2</td><td>Daily (11-day lag)</td><td>500m</td><td>Free</td></tr>
           <tr><td>VIIRS DNB L1B swaths</td><td>Daily (~3h lag)</td><td>750m</td><td>Free</td></tr>
           <tr><td>Sentinel-1 SAR</td><td>6-day revisit</td><td>10m</td><td>Free</td></tr>
+          <tr><td>NASA HLS / Sentinel-2 NDVI</td><td>5-day revisit</td><td>10&ndash;30m</td><td>Free</td></tr>
           <tr><td>IODA / Cloudflare</td><td>Daily</td><td>Country</td><td>Free</td></tr>
           <tr><td>OpenSky ADS-B</td><td>Daily</td><td>Airport</td><td>Free (rate-limited)</td></tr>
           <tr><td>GDELT</td><td>Daily</td><td>Country</td><td>Free (rate-limited)</td></tr>
@@ -704,6 +744,7 @@
           <a href="data/flights.json">flights</a> &middot;
           <a href="data/thermal_signatures.json">thermal</a> &middot;
           <a href="data/sar.json">SAR vessels</a> &middot;
+          <a href="data/vegetation.json">vegetation / NDVI</a> &middot;
           <a href="data/fuel_security.json">fuel security</a>
         </p>
 
@@ -1439,6 +1480,121 @@ function renderRisk(riskData) {
   }
 }
 
+function renderVegetationData(data) {
+  var latest = data.latest || {};
+  var regions = data.regions || {};
+  var tbody = document.getElementById('vegetation-tbody');
+  var select = document.getElementById('vegetation-region-select');
+  if (!tbody || !select) return;
+
+  var names = Object.keys(latest).sort(function (a, b) {
+    var av = latest[a].pct_change;
+    var bv = latest[b].pct_change;
+    if (av == null && bv == null) return a.localeCompare(b);
+    if (av == null) return 1;
+    if (bv == null) return -1;
+    return av - bv;
+  });
+
+  tbody.textContent = '';
+  select.textContent = '';
+
+  if (!names.length) {
+    tbody.appendChild(el('tr')).appendChild(el('td', { colspan: '6', class: 'empty-state' }, 'Agricultural NDVI data not available.'));
+    setEmptyState('vegetation-chart', 'Agricultural NDVI data not available.');
+    return;
+  }
+
+  var lowConfidence = 0;
+  var negative = 0;
+  var latestDate = null;
+  names.forEach(function (name) {
+    var row = latest[name] || {};
+    if (row.confidence === 'low') lowConfidence++;
+    if (row.pct_change != null && row.pct_change < 0) negative++;
+    if (!latestDate || row.date > latestDate) latestDate = row.date;
+
+    var tr = el('tr');
+    if (row.confidence === 'low') tr.className = 'frp-high';
+    tr.appendChild(el('td', { style: 'font-weight:500' }, name));
+    tr.appendChild(el('td', null, row.country || '\u2014'));
+    tr.appendChild(el('td', { class: 'mono', style: 'text-align:right' },
+      row.mean_ndvi != null ? row.mean_ndvi.toFixed(3) : '\u2014'));
+    var pctTd = el('td', { style: 'text-align:right' });
+    pctTd.appendChild(pctSpan(row.pct_change));
+    tr.appendChild(pctTd);
+    tr.appendChild(el('td', { class: 'mono', style: 'text-align:right' },
+      row.cloud_fraction != null ? (row.cloud_fraction * 100).toFixed(0) + '%' : '\u2014'));
+    tr.appendChild(el('td', null, row.confidence || '\u2014'));
+    tbody.appendChild(tr);
+
+    select.appendChild(el('option', { value: name }, name));
+  });
+
+  var summary = names.length + ' agricultural regions tracked';
+  if (latestDate) summary += ' \u2022 latest: ' + latestDate;
+  summary += ' \u2022 ' + negative + ' below baseline';
+  summary += ' \u2022 ' + lowConfidence + ' low-confidence/cloud-affected';
+  setText('vegetation-summary', summary);
+  setText('vegetation-freshness', latestDate ? 'Latest: ' + latestDate + ' \u2022 cloud fraction shown per region' : 'HLS/Sentinel-derived NDVI');
+
+  function draw(regionName) {
+    var series = regions[regionName] || [];
+    if (!series.length) {
+      setEmptyState('vegetation-chart', 'No NDVI time series for this region.');
+      return;
+    }
+
+    var colors = series.map(function (row) {
+      if (row.confidence === 'low') return '#a0aec0';
+      if (row.pct_change == null) return '#2b6cb0';
+      return row.pct_change < -10 ? '#c0392b' : row.pct_change < 0 ? '#ed8936' : '#38a169';
+    });
+
+    Plotly.newPlot('vegetation-chart', [
+      {
+        x: series.map(function (row) { return row.date; }),
+        y: series.map(function (row) { return row.mean_ndvi; }),
+        customdata: series.map(function (row) {
+          return [row.pct_change, row.cloud_fraction, row.confidence, row.baseline_ndvi];
+        }),
+        type: 'scatter',
+        mode: 'lines+markers',
+        name: 'Mean NDVI',
+        line: { color: '#276749', width: 2 },
+        marker: { size: 8, color: colors },
+        hovertemplate: '<b>%{x}</b><br>NDVI: %{y:.3f}<br>vs baseline: %{customdata[0]:+.1f}%<br>Cloud: %{customdata[1]:.0%}<br>Confidence: %{customdata[2]}<extra></extra>',
+      },
+      {
+        x: series.filter(function (row) { return row.baseline_ndvi != null; }).map(function (row) { return row.date; }),
+        y: series.filter(function (row) { return row.baseline_ndvi != null; }).map(function (row) { return row.baseline_ndvi; }),
+        type: 'scatter',
+        mode: 'lines',
+        name: 'Baseline',
+        line: { color: '#718096', width: 1.5, dash: 'dot' },
+        hovertemplate: '<b>Baseline</b><br>%{y:.3f}<br>%{x}<extra></extra>',
+      },
+    ], {
+      margin: { t: 10, r: 20, b: 42, l: 50 },
+      font: { family: 'Inter, system-ui, sans-serif', size: 11, color: '#4a5568' },
+      paper_bgcolor: 'transparent',
+      plot_bgcolor: 'transparent',
+      xaxis: { showgrid: false, tickfont: { size: 10 } },
+      yaxis: { title: 'NDVI', gridcolor: '#edf2f7', range: [-0.15, 0.75], titlefont: { size: 10 } },
+      legend: { orientation: 'h', y: 1.12, x: 0, font: { size: 10 } },
+      hovermode: 'x unified',
+    }, { responsive: true, displayModeBar: false });
+  }
+
+  var preferred = names.find(function (name) {
+    var row = latest[name];
+    return row && row.pct_change != null && row.confidence !== 'low';
+  }) || names[0];
+  select.value = preferred;
+  draw(preferred);
+  select.addEventListener('change', function () { draw(this.value); });
+}
+
 // ── nightlight table ──────────────────────────────────────────────────────────
 function renderNLTable(nlAllData) {
   var tbody = document.getElementById('nl-tbody');
@@ -1909,11 +2065,12 @@ Promise.all([
   loadOptional(DATA + '/thermal_signatures.json', {}),
   loadOptional(DATA + '/flights.json', {}),
   loadOptional(DATA + '/fires.json', {}),
+  loadOptional(DATA + '/vegetation.json', { regions: {}, latest: {} }),
 ]).then(function (results) {
   var nl = results[0] || {}, risk = results[1] || {}, sar = results[2] || {},
       fireGeo = results[3] || { features: [] }, infraFires = results[4] || [], meta = results[5] || {},
       inet = results[6] || {}, thermalSigs = results[7] || {}, flightData = results[8] || {},
-      fireTimeSeries = results[9] || {};
+      fireTimeSeries = results[9] || {}, vegetation = results[10] || { regions: {}, latest: {} };
 
   // Build per-city data structure for chart
   Object.keys(nl).forEach(function (city) {
@@ -1951,6 +2108,7 @@ Promise.all([
   renderFireTable(infraFires);
   renderFireHero(fireTimeSeries);
   renderHormuzHero(sar);
+  renderVegetationData(vegetation);
   renderInternetTable(inet);
   initInetSelect(Object.keys(inet).sort());
   renderInfraTable(thermalSigs);
