@@ -571,6 +571,8 @@ class Command(BaseCommand):
         """NZ migration signal detection data — asset counts, SAR, migration pressure, nightlights."""
         from collections import defaultdict
 
+        today = date.today()
+
         # Optical asset counts (marina vessels + airport aircraft)
         asset_counts = (
             OpticalAssetCount.objects.filter(aoi__country="New Zealand")
@@ -581,8 +583,29 @@ class Command(BaseCommand):
         )
 
         assets = defaultdict(list)
+        optical_quality = defaultdict(lambda: {
+            "source": "Sentinel-2 optical bright-object detector",
+            "rows": 0,
+            "usable_rows": 0,
+            "baseline_rows": 0,
+            "latest_date": None,
+            "avg_cloud_fraction": None,
+            "cloud_sum": 0.0,
+        })
         for a in asset_counts:
             key = a["aoi__name"]
+            quality_key = a["aoi__category"]
+            q = optical_quality[quality_key]
+            q["rows"] += 1
+            if a["cloud_fraction"] is not None:
+                q["cloud_sum"] += float(a["cloud_fraction"])
+            if a["cloud_fraction"] is not None and a["cloud_fraction"] < 0.5:
+                q["usable_rows"] += 1
+            if a["baseline_count"] is not None:
+                q["baseline_rows"] += 1
+            latest = str(a["date"])
+            if q["latest_date"] is None or latest > q["latest_date"]:
+                q["latest_date"] = latest
             assets[key].append({
                 "date": str(a["date"]),
                 "category": a["aoi__category"],
@@ -603,7 +626,26 @@ class Command(BaseCommand):
         )
 
         sar = defaultdict(list)
+        sar_quality = {
+            "source": "Sentinel-1 SAR vessel detector",
+            "rows": 0,
+            "usable_rows": 0,
+            "baseline_rows": 0,
+            "latest_date": None,
+            "avg_coverage": None,
+            "coverage_sum": 0.0,
+        }
         for s in nz_sar:
+            sar_quality["rows"] += 1
+            if s["scene_coverage"] is not None:
+                sar_quality["coverage_sum"] += float(s["scene_coverage"])
+            if s["scene_coverage"] is not None and s["scene_coverage"] >= 0.5:
+                sar_quality["usable_rows"] += 1
+            if s["baseline_count"] is not None:
+                sar_quality["baseline_rows"] += 1
+            latest = str(s["date"])
+            if sar_quality["latest_date"] is None or latest > sar_quality["latest_date"]:
+                sar_quality["latest_date"] = latest
             sar[s["chokepoint__name"]].append({
                 "date": str(s["date"]),
                 "vessel_count": s["vessel_count"],
@@ -611,6 +653,72 @@ class Command(BaseCommand):
                 "pct_change": round(s["pct_change"], 1) if s["pct_change"] is not None else None,
                 "coverage": round(s["scene_coverage"], 2) if s["scene_coverage"] is not None else None,
             })
+
+        # ADS-B airport activity is a stronger near-term fallback than tiny
+        # Sentinel-2 apron chips, so include it directly in the NZ payload.
+        flight_rows = (
+            FlightActivity.objects.filter(country="New Zealand")
+            .order_by("airport_name", "date")
+            .values("airport_name", "airport_icao", "date", "arrivals", "departures",
+                    "total_movements", "baseline_movements", "pct_change")
+        )
+        airport_activity = defaultdict(list)
+        flight_quality = {
+            "source": "OpenSky ADS-B flight activity",
+            "rows": 0,
+            "usable_rows": 0,
+            "baseline_rows": 0,
+            "latest_date": None,
+        }
+        for f in flight_rows:
+            flight_quality["rows"] += 1
+            if f["total_movements"] is not None:
+                flight_quality["usable_rows"] += 1
+            if f["baseline_movements"] is not None:
+                flight_quality["baseline_rows"] += 1
+            latest = str(f["date"])
+            if flight_quality["latest_date"] is None or latest > flight_quality["latest_date"]:
+                flight_quality["latest_date"] = latest
+            airport_activity[f["airport_name"]].append({
+                "date": latest,
+                "icao": f["airport_icao"],
+                "arrivals": f["arrivals"],
+                "departures": f["departures"],
+                "total": f["total_movements"],
+                "baseline": round(f["baseline_movements"], 1) if f["baseline_movements"] is not None else None,
+                "pct_change": round(f["pct_change"], 1) if f["pct_change"] is not None else None,
+            })
+
+        for q in optical_quality.values():
+            if q["rows"]:
+                q["avg_cloud_fraction"] = round(q["cloud_sum"] / q["rows"], 3)
+            q.pop("cloud_sum", None)
+            q["latest_age_days"] = (
+                (today - date.fromisoformat(q["latest_date"])).days
+                if q["latest_date"] else None
+            )
+            q["coverage_level"] = self._coverage_level(
+                q["usable_rows"], q["rows"], q["latest_age_days"], stale_after_days=14
+            )
+        if sar_quality["rows"]:
+            sar_quality["avg_coverage"] = round(sar_quality["coverage_sum"] / sar_quality["rows"], 3)
+        sar_quality.pop("coverage_sum", None)
+        sar_quality["latest_age_days"] = (
+            (today - date.fromisoformat(sar_quality["latest_date"])).days
+            if sar_quality["latest_date"] else None
+        )
+        sar_quality["coverage_level"] = self._coverage_level(
+            sar_quality["usable_rows"], sar_quality["rows"], sar_quality["latest_age_days"],
+            stale_after_days=14,
+        )
+        flight_quality["latest_age_days"] = (
+            (today - date.fromisoformat(flight_quality["latest_date"])).days
+            if flight_quality["latest_date"] else None
+        )
+        flight_quality["coverage_level"] = self._coverage_level(
+            flight_quality["usable_rows"], flight_quality["rows"], flight_quality["latest_age_days"],
+            stale_after_days=7,
+        )
 
         # Migration pressure indicators
         pressure = (
@@ -655,11 +763,31 @@ class Command(BaseCommand):
         result = {
             "asset_counts": dict(sorted(assets.items())),
             "sar": dict(sorted(sar.items())),
+            "airport_activity": dict(sorted(airport_activity.items())),
+            "data_quality": {
+                "marina_optical": dict(optical_quality.get("marina", {})),
+                "airport_optical": dict(optical_quality.get("airport", {})),
+                "sar": sar_quality,
+                "airport_adsb": flight_quality,
+            },
             "migration_pressure": dict(sorted(migration.items())),
             "nightlights": dict(sorted(nightlights.items())),
         }
 
         self._write(os.path.join(out_dir, "nz.json"), result)
+
+    def _coverage_level(self, usable_rows, total_rows, latest_age_days, stale_after_days):
+        """Classify monitoring quality for static dashboards."""
+        if not total_rows:
+            return "missing"
+        if latest_age_days is not None and latest_age_days > stale_after_days:
+            return "stale"
+        ratio = usable_rows / total_rows if total_rows else 0
+        if ratio >= 0.7:
+            return "good"
+        if ratio >= 0.3:
+            return "partial"
+        return "poor"
 
     def _export_flights(self, out_dir):
         """Airport flight activity time series."""
