@@ -3,30 +3,28 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Satellite Intelligence — Gulf Crisis + NZ Migration Monitor</title>
-<meta name="description" content="Open-source satellite intelligence dashboard tracking compound humanitarian, economic, and infrastructure effects of the 2026 Gulf crisis. Nightlights, fire detection, vessel traffic, fuel security, and more.">
+<title>Humanitarian Systems Monitor — Gulf Crisis + New Zealand</title>
+<meta name="description" content="Open-source evidence dashboard tracking compound humanitarian, economic, and infrastructure stress during the 2026 Gulf crisis, with explicit source coverage and uncertainty.">
 
 <!-- Open Graph -->
 <meta property="og:type" content="website">
-<meta property="og:title" content="Gulf Region Compound Risk Monitor">
-<meta property="og:description" content="Satellite intelligence tracking infrastructure collapse, trade disruption, and fuel security across the Gulf region and New Zealand. Live data from NASA FIRMS, VIIRS, Sentinel-1 SAR, and MBIE.">
+<meta property="og:title" content="Gulf Humanitarian Systems Monitor">
+<meta property="og:description" content="Open-source evidence on trade disruption, environmental signals, and fuel-security pressure across the Gulf region and New Zealand, with coverage and uncertainty shown.">
 <meta property="og:image" content="https://danwaterfield.github.io/satint-public/social-preview.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="Gulf Region Compound Risk Monitor dashboard showing situation brief, nightlight radiance charts, and infrastructure status">
+<meta property="og:image:alt" content="Gulf Humanitarian Systems Monitor showing a situation brief, evidence coverage, radiance charts, and infrastructure-adjacent anomalies">
 <meta property="og:url" content="https://danwaterfield.github.io/satint-public/">
 
 <!-- Twitter Card -->
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Gulf Region Compound Risk Monitor">
-<meta name="twitter:description" content="Open-source satellite intelligence: nightlights, fire detection, vessel traffic, fuel security. Tracking second and third order effects of the 2026 Gulf crisis.">
+<meta name="twitter:title" content="Gulf Humanitarian Systems Monitor">
+<meta name="twitter:description" content="Open-source evidence on second- and third-order effects of the 2026 Gulf crisis, with source coverage and uncertainty made explicit.">
 <meta name="twitter:image" content="https://danwaterfield.github.io/satint-public/social-preview.png">
 <meta name="twitter:image:alt" content="Gulf Region Compound Risk Monitor dashboard">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+<link rel="stylesheet" href="./vendor/leaflet/leaflet.css"/>
+<script src="./vendor/leaflet/leaflet.js"></script>
+<script src="./vendor/plotly/plotly-2.27.0.min.js"></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -45,8 +43,8 @@
     --green:   #276749;
     --green-lt:#f0fff4;
     --blue:    #2b6cb0;
-    --font-mono: 'IBM Plex Mono', 'Courier New', monospace;
-    --font-sans: 'Inter', system-ui, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     --radius: 3px;
   }
 
@@ -101,6 +99,7 @@
   .risk-card.high      { border-left-color: var(--amber); }
   .risk-card.elevated  { border-left-color: #3182ce; }
   .risk-card.normal    { border-left-color: #68d391; }
+  .risk-card.unknown   { border-left-color: #a0aec0; background: #f7fafc; }
 
   .risk-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
   .risk-city { font-weight: 600; font-size: 13px; }
@@ -112,6 +111,7 @@
   .badge-high      { background: #ed8936; color: #fff; }
   .badge-elevated  { background: #3182ce; color: #fff; }
   .badge-normal    { background: #38a169; color: #fff; }
+  .badge-unknown   { background: #e2e8f0; color: #4a5568; }
 
   .risk-score { font-family: var(--font-mono); font-size: 20px; font-weight: 500; margin-bottom: 8px; }
   .progress-track { background: #edf2f7; border-radius: 2px; height: 5px; margin-bottom: 6px; }
@@ -257,7 +257,8 @@
     pointer-events: none; opacity: 0; transition: opacity 0.15s; z-index: 100;
     line-height: 1.4; text-transform: none; letter-spacing: 0;
   }
-  .tip:hover::after { opacity: 1; }
+  .tip:hover::after, .tip:focus::after, .tip:focus-visible::after { opacity: 1; }
+  .tip:focus-visible { outline: 2px solid #3182ce; outline-offset: 2px; }
   .tip-right::after { left: 0; transform: none; }
   .tip-left::after { left: auto; right: 0; transform: none; }
 
@@ -285,6 +286,13 @@
     .risk-grid { grid-template-columns: 1fr; }
     .two-col { grid-template-columns: 1fr; }
     .nz-summary { grid-template-columns: 1fr 1fr; }
+  }
+
+  @media (max-width: 900px) {
+    .topbar { height: auto; align-items: flex-start; flex-direction: column; gap: 5px; }
+    .topbar-left { width: 100%; }
+    .topbar-right { width: 100%; gap: 12px; flex-wrap: wrap; }
+    .topbar-right > * { white-space: nowrap; }
   }
 
   /* ── Mobile: fuel security tab ── */
@@ -367,13 +375,16 @@
 <header class="topbar">
   <div class="topbar-left">
     <span class="topbar-title">Gulf Region Compound Risk Monitor</span>
-    <span class="topbar-sub">Satellite Intelligence Pipeline &mdash; v0.1</span>
+    <span class="topbar-sub">Humanitarian Systems Monitor &mdash; v0.2</span>
   </div>
   <div class="topbar-right">
     <a href="#methodology" style="color:#a0b0c8;text-decoration:none;font-size:11px;">Methodology</a>
     <span><span class="status-dot"></span>Static export</span>
     <span class="topbar-date" id="topbar-date"></span>
-    <span id="topbar-updated"></span>
+    <span id="topbar-observed">Observed —</span>
+    <span id="topbar-ingested">Ingested —</span>
+    <span id="topbar-model">Model —</span>
+    <span id="topbar-updated">Exported —</span>
   </div>
 </header>
 
@@ -413,19 +424,19 @@
       <div class="stat-sub" id="stat-alerts-sub">Latest data</div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">Infrastructure Fires (48h)</div>
+      <div class="stat-label">Infrastructure-Proximate Anomalies (48h)</div>
       <div class="stat-value amber" id="stat-fires">—</div>
-      <div class="stat-sub">Within 25 km of known sites</div>
+      <div class="stat-sub">Proximity evidence; not damage attribution</div>
     </div>
     <div class="stat-card">
       <div class="stat-label">Cities Monitored</div>
       <div class="stat-value green" id="stat-nl">—</div>
-      <div class="stat-sub" id="stat-nl-sub">Latest — VNP46A2 / DNB</div>
+      <div class="stat-sub" id="stat-nl-sub">Verified VNP46A2 observations</div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">Facilities Damaged</div>
+      <div class="stat-label">Persistent Thermal Evidence</div>
       <div class="stat-value red" id="stat-damaged">—</div>
-      <div class="stat-sub">Thermal signature analysis</div>
+      <div class="stat-sub">Unique monitored facilities</div>
     </div>
   </div>
 
@@ -458,8 +469,8 @@
   <!-- Compound risk -->
   <div>
     <div class="section-header">
-      <span class="section-title">Compound Risk Indicators</span>
-      <span class="section-meta">Weighted composite: nightlight 20% &bull; fire 15% &bull; trade 15% &bull; NO&#8322; 12% &bull; internet 12% &bull; flights 10% &bull; GDELT 8% &bull; thermal 8%</span>
+      <span class="section-title">Compound Stress Indicators</span>
+      <span class="section-meta">Exploratory index &bull; local evidence separated from systemic trade exposure &bull; minimum 60% component coverage</span>
     </div>
     <div class="risk-grid" id="risk-grid">
       <p class="empty-state" style="grid-column:1/-1">Loading risk data…</p>
@@ -582,7 +593,7 @@
     <div class="card">
       <div class="section-header">
         <span class="section-title">Internet Connectivity</span>
-        <span class="section-meta">IODA / Google Transparency Report (0 = offline, 1 = normal)</span>
+        <span class="section-meta">IODA normalized Google usage signal; not population connectivity</span>
       </div>
       <div class="table-wrap">
       <table>
@@ -612,8 +623,8 @@
 
     <div class="card">
       <div class="section-header">
-        <span class="section-title">Infrastructure Status</span>
-        <span class="section-meta">Thermal signature monitoring — desalination, oil, power, LNG</span>
+        <span class="section-title">Infrastructure-Adjacent Thermal Evidence</span>
+        <span class="section-meta">FIRMS observations do not establish operating status or damage</span>
       </div>
       <div class="table-wrap">
       <table>
@@ -622,7 +633,7 @@
           <tr>
             <th scope="col">Facility</th>
             <th scope="col">Type</th>
-            <th scope="col">Status</th>
+            <th scope="col">Evidence</th>
             <th scope="col" style="text-align:right">Fires</th>
             <th scope="col" style="text-align:right">Max FRP (MW)</th>
           </tr>
@@ -634,11 +645,11 @@
       </div>
       <div style="margin-top:12px">
         <div class="section-header">
-          <span class="section-title" style="font-size:10px">Damage Detected</span>
+          <span class="section-title" style="font-size:10px">Persistent Anomaly History</span>
         </div>
         <div class="table-wrap">
         <table>
-          <caption class="sr-only">Infrastructure damage events detected via thermal signatures</caption>
+          <caption class="sr-only">Persistent thermal anomalies near infrastructure</caption>
           <thead>
             <tr>
               <th scope="col">Facility</th>
@@ -660,7 +671,7 @@
   <div class="card">
     <div class="section-header">
       <span class="section-title">Recent Infrastructure Proximity Alerts</span>
-      <span class="section-meta">Thermal anomalies within 25 km of monitored sites</span>
+      <span class="section-meta">Thermal anomalies within 10 km; attribution requires closer corroborated evidence</span>
     </div>
     <div class="table-wrap">
     <table>
@@ -686,7 +697,7 @@
   <div class="card">
     <div class="section-header">
       <span class="section-title">Airport Flight Activity</span>
-      <span class="section-meta">OpenSky ADS-B — daily arrivals + departures (0 = no coverage or airspace closure)</span>
+      <span class="section-meta">OpenSky ADS-B — missing coverage is shown separately from an observed zero</span>
     </div>
     <div style="margin-bottom:12px">
       <label for="flight-airport-select" style="font-size:13px;color:var(--slate-lt);margin-right:8px">Airport:</label>
@@ -703,10 +714,11 @@
           <th scope="col" style="text-align:right">Arrivals</th>
           <th scope="col" style="text-align:right">Departures</th>
           <th scope="col" style="text-align:right">Total</th>
+          <th scope="col">Coverage</th>
         </tr>
       </thead>
       <tbody id="flight-tbody">
-        <tr><td colspan="5" class="empty-state">Loading&hellip;</td></tr>
+        <tr><td colspan="6" class="empty-state">Loading&hellip;</td></tr>
       </tbody>
     </table>
     </div>
@@ -738,9 +750,9 @@
           <li><strong>% change:</strong> (current &minus; baseline) / baseline &times; 100</li>
           <li><strong>Compound risk:</strong> Weighted composite of 8 normalised factors &mdash; NL 20%, Fire 15%, Trade 15%, NO&#8322; 12%, Internet 12%, Flights 10%, GDELT 8%, Thermal 8%</li>
           <li><strong>DNB L1B caveat:</strong> No lunar illumination or straylight correction &mdash; absolute values less reliable than relative day-to-day trends</li>
-          <li><strong>Cloud cover:</strong> Tracked per observation as quality indicator, not filtered. High cloud fraction reduces confidence.</li>
-          <li><strong>Ramadan caveat:</strong> Baseline is pre-Ramadan. Behavioral changes (later activity, outdoor lighting) may affect nightlight comparisons.</li>
-          <li><strong>Infrastructure &ldquo;No Data&rdquo;:</strong> Flaring facilities (oil, LNG) normally emit detectable thermal signatures. Absence of FIRMS detections may indicate offline status or a data gap &mdash; reported as &ldquo;No Data&rdquo; rather than confirmed &ldquo;Offline&rdquo;.</li>
+          <li><strong>Nightlight quality:</strong> VNP46A2 Mandatory Quality Flag 0 pixels only; cloud-affected or thin observations are marked partial.</li>
+          <li><strong>Ramadan caveat:</strong> The 15 Jan–27 Feb baseline includes Ramadan from mid-February. Future baselines should stratify pre-Ramadan and Ramadan behavior.</li>
+          <li><strong>Infrastructure evidence:</strong> FIRMS thermal anomalies near a facility are proximity evidence only. A detection does not establish cause or damage; an absence cannot distinguish normal operations from source-coverage and detection limits.</li>
         </ul>
 
         <h4 style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--navy);margin:16px 0 6px;">Download Data</h4>
@@ -760,7 +772,7 @@
 
         <h4 style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--navy);margin:16px 0 6px;">Citation</h4>
         <p style="font-family:var(--font-mono);font-size:10px;background:#f7f8fa;padding:8px;border-radius:3px;">
-          Gulf Region Compound Risk Monitor. Satellite Intelligence Pipeline. [Date accessed]. Available at: https://danwaterfield.github.io/satint-public/
+          Gulf Humanitarian Systems Monitor. Crisis Evidence Pipeline. [Date accessed]. Available at: https://danwaterfield.github.io/satint-public/
         </p>
       </div>
     </details>
@@ -929,7 +941,7 @@
       </div>
       <div class="fuel-countdown">
         <div class="fuel-countdown-days" id="fuel-countdown-days">—</div>
-        <div class="fuel-countdown-label tip tip-right" data-tip="MSO (Minimum Stock Obligation) is the legal minimum fuel stock NZ must hold: petrol 28d, diesel 21d, jet 24d. This countdown shows the worst-case fuel type based on current depletion trajectory." id="fuel-countdown-label">days until worst fuel type hits MSO minimum</div>
+        <div class="fuel-countdown-label tip tip-right" data-tip="Modeled time until effective physical cover reaches 14 days. This is an operational sensitivity threshold, not MSO compliance or a rationing forecast." id="fuel-countdown-label">days to modeled 14-day supply-pressure threshold</div>
         <div style="font-size:12px;color:var(--slate-lt);margin-top:4px;" id="fuel-rationing-date"></div>
       </div>
       <div style="flex:1;">
@@ -944,8 +956,8 @@
   <!-- Section 2: Days of Supply Cards -->
   <div>
     <div class="section-header">
-      <span class="section-title tip" data-tip="Onshore stock = fuel physically in NZ. On-water = fuel on tankers en route. Red MSO line = legal minimum. Cape rerouting via Good Hope adds ~14 days transit vs Hormuz, reducing effective on-water stock.">Days of Supply</span>
-      <span class="section-meta">MBIE stock data &bull; <span class="tip" data-tip="Minimum Stock Obligation — NZ's legally mandated fuel reserve floor. Breaching MSO triggers emergency protocols and potential rationing.">MSO</span> = Minimum Stock Obligation &bull; <span id="stock-staleness"></span></span>
+      <span class="section-title tip" data-tip="Onshore stock = fuel physically in NZ. On-water = fuel reported en route. Only the legally eligible subset of incoming fuel can count toward MSO; that subset is not available here.">Days of Physical Supply</span>
+      <span class="section-meta">MBIE stock data &bull; MSO compliance withheld without eligible incoming-stock data &bull; <span id="stock-staleness"></span></span>
     </div>
     <div class="fuel-cards" id="fuel-stock-cards">
       <p class="empty-state" style="grid-column:1/-1">Loading fuel stock data…</p>
@@ -1037,7 +1049,7 @@
   <!-- Section 6: Industry Impact Cascade -->
   <div class="card">
     <div class="section-header">
-      <span class="section-title tip" data-tip="Each industry has a fuel type dependency and impact threshold (days above MSO at which pressure begins). Days-to-impact = (projected stock - threshold) / daily depletion rate. Sorted soonest-first.">Industry Impact Cascade</span>
+      <span class="section-title tip" data-tip="Each industry has an illustrative physical-cover threshold. Days-to-impact = (modeled effective cover - threshold) / daily depletion rate. These are scenario assumptions, not MSO compliance tests. Sorted soonest-first.">Industry Impact Cascade</span>
       <span class="section-meta">Projected — based on current depletion trajectory &bull; thresholds are domain estimates</span>
     </div>
     <div class="table-wrap">
@@ -1072,7 +1084,7 @@
 
   <!-- Scenario Projections -->
   <div class="panel-header" style="margin-top:24px">
-    <span class="section-title tip" data-tip="Week-by-week fuel stock projections under 5 scenarios. Shows how different Hormuz outcomes change NZ's supply timeline and when intervention windows close.">Scenario Projections</span>
+    <span class="section-title tip" tabindex="0" data-tip="Week-by-week effective physical cover under five deterministic scenarios. These are sensitivity paths, not probability forecasts or rationing dates.">Supply-Pressure Scenarios</span>
     <span class="section-meta">52-week horizon &bull; select fuel type below</span>
   </div>
   <div id="scenario-intervention" style="font-size:13px;line-height:1.5;padding:8px 12px;margin-bottom:12px;background:var(--red-lt);border-left:3px solid var(--red);border-radius:4px;display:none"></div>
@@ -1111,12 +1123,18 @@
 'use strict';
 
 var DATA = './data';
+
+// Tooltip explanations must be available without a mouse.
+document.querySelectorAll('.tip').forEach(function (node) {
+  if (!node.hasAttribute('tabindex')) node.setAttribute('tabindex', '0');
+  node.setAttribute('role', 'note');
+});
 var NZ_DATA_VERSION = '2026-06-11-nz-quality';
 var nlData = {};   // city → {dates, mean_radiance, pct_change, baseline_radiance}
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 function load(path) {
-  return fetch(path).then(function (r) {
+  return fetch(path, { cache: 'no-store' }).then(function (r) {
     if (!r.ok) throw new Error(path + ': ' + r.status);
     return r.json();
   }).catch(function (err) {
@@ -1238,6 +1256,15 @@ function renderNightlightHero(nlAllData) {
     });
   });
 
+  if (!traces.length) {
+    setEmptyState(
+      'nightlight-hero-chart',
+      'No quality-screened VNP46A2 observations are available in this export.'
+    );
+    setText('nl-hero-freshness', 'Verified observation unavailable');
+    return;
+  }
+
   // Freshness tag
   var latestDate = null;
   gulfCities.forEach(function (city) {
@@ -1282,7 +1309,11 @@ var REGION_COLORS = {
 
 function renderFireHero(fireData) {
   var dbc = fireData.daily_by_country;
-  if (!dbc) return;
+  if (!dbc || !Object.keys(dbc).length) {
+    setEmptyState('fire-hero-chart', 'No verified FIRMS observations are available in this export.');
+    setText('fire-chart-freshness', 'Verified observation unavailable');
+    return;
+  }
 
   var traces = [];
   Object.keys(dbc).forEach(function (region) {
@@ -1398,45 +1429,38 @@ function renderNightlightChart(cityName) {
   var dates = series.map(function (d) { return d.date; });
   var radiance = series.map(function (d) { return d.mean_radiance; });
   var pct = series.map(function (d) { return d.pct_change; });
-  var baseline = series.length ? series[0].baseline_radiance : null;
+  var detail = series.map(function (d) {
+    return [d.mean_radiance, d.cloud_fraction, d.observation_state, d.valid_pixel_count];
+  });
 
   var colors = pct.map(function (v) {
     return v == null ? '#a0aec0' : v < -20 ? '#c0392b' : v < 0 ? '#ed8936' : '#38a169';
   });
 
-  var traces = [
-    { x: dates, y: radiance, type: 'scatter', mode: 'lines+markers', name: 'Radiance',
-      line: { color: '#2b6cb0', width: 2 }, marker: { size: 4 }, yaxis: 'y1',
-      hovertemplate: '%{x}<br>%{y:.4f} nW/cm\u00b2/sr<extra></extra>' },
-    { x: dates, y: pct, type: 'bar', name: '% vs baseline',
-      marker: { color: colors, opacity: 0.6 }, yaxis: 'y2',
-      hovertemplate: '%{x}<br>%{y:.1f}%<extra></extra>' },
-  ];
+  var traces = [{
+    x: dates, y: pct, customdata: detail,
+    type: 'scatter', mode: 'lines+markers', name: '% vs product-matched baseline',
+    line: { color: '#2b6cb0', width: 2 },
+    marker: { size: 6, color: colors },
+    hovertemplate: '%{x}<br>%{y:.1f}% vs baseline<br>' +
+      'Radiance %{customdata[0]:.3f} nW/cm\u00b2/sr<br>' +
+      'Cloud %{customdata[1]:.0%} \u00b7 %{customdata[2]} \u00b7 n=%{customdata[3]}<extra></extra>',
+  }];
 
   var shapes = [];
-  if (baseline) {
-    shapes.push({ type: 'line', xref: 'paper', x0: 0, x1: 1,
-      yref: 'y', y0: baseline, y1: baseline,
-      line: { color: '#718096', width: 1, dash: 'dot' } });
-  }
   shapes.push({ type: 'line', xref: 'paper', x0: 0, x1: 1,
-    yref: 'y2', y0: 0, y1: 0,
+    yref: 'y', y0: 0, y1: 0,
     line: { color: '#a0aec0', width: 1, dash: 'dash' } });
 
   Plotly.newPlot('nightlight-chart', traces, {
-    margin: { t: 10, r: 60, b: 40, l: 60 },
+    margin: { t: 10, r: 20, b: 40, l: 60 },
     font: { family: 'Inter, system-ui, sans-serif', size: 11, color: '#4a5568' },
     paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
     legend: { x: 0, y: 1.1, orientation: 'h', font: { size: 10 } },
     xaxis: { showgrid: false, tickfont: { size: 10 } },
-    yaxis: { title: 'Radiance (nW/cm\u00b2/sr)', showgrid: true, gridcolor: '#edf2f7', titlefont: { size: 10 }, automargin: true },
-    yaxis2: { title: '% Change', overlaying: 'y', side: 'right', showgrid: false, titlefont: { size: 10 }, automargin: true },
+    yaxis: { title: '% Change from VNP46A2 Baseline', showgrid: true, gridcolor: '#edf2f7', titlefont: { size: 10 }, automargin: true },
     shapes: shapes,
-    annotations: baseline ? [{
-      x: 0, xref: 'paper', y: baseline, yref: 'y',
-      text: 'Pre-war baseline', showarrow: false,
-      font: { size: 9, color: '#718096' }, xanchor: 'left'
-    }] : [],
+    annotations: [],
   }, { responsive: true, displayModeBar: false });
 }
 
@@ -1445,13 +1469,17 @@ function renderRisk(riskData) {
   var grid = document.getElementById('risk-grid');
   grid.textContent = '';
 
-  var indicators = (riskData.indicators || []).filter(function (ind) {
+  var monitored = (riskData.indicators || []).filter(function (ind) {
     return NZ_CITIES.indexOf(ind.aoi_name) === -1
       && CONTROL_CITIES.indexOf(ind.aoi_name) === -1;
   });
+  setText('stat-locations', String(monitored.length));
+  var indicators = monitored.filter(function (ind) { return ind.is_publishable; });
   if (!indicators.length) {
     grid.appendChild(el('p', { class: 'empty-state', style: 'grid-column:1/-1' },
-      'Risk data not yet available for today.'));
+      'No location currently meets the v2 minimum coverage threshold. Legacy source rows are shown as unknown until they are successfully re-ingested with retrieval provenance.'));
+    setText('stat-alerts', '0\u2009/\u20090');
+    if (riskData.as_of) setText('stat-alerts-sub', 'Coverage gate as of ' + riskData.as_of);
     return;
   }
 
@@ -1460,19 +1488,24 @@ function renderRisk(riskData) {
     if (ind.alert_level === 'emergency') emergency++;
     else if (ind.alert_level === 'critical') critical++;
 
-    var card = el('div', { class: 'risk-card ' + ind.alert_level });
+    var level = ind.is_publishable ? ind.alert_level : 'unknown';
+    var card = el('div', { class: 'risk-card ' + level });
 
     var header = el('div', { class: 'risk-card-header' });
     var nameWrap = el('div');
     nameWrap.appendChild(el('div', { class: 'risk-city' }, ind.aoi_name));
     nameWrap.appendChild(el('div', { class: 'risk-country' }, ind.country));
     header.appendChild(nameWrap);
-    header.appendChild(el('span', { class: 'badge badge-' + ind.alert_level }, ind.alert_level));
+    header.appendChild(el('span', { class: 'badge badge-' + level }, level));
     card.appendChild(header);
 
-    card.appendChild(el('div', { class: 'risk-score' }, ind.compound_risk != null ? ind.compound_risk.toFixed(2) : '\u2014'));
+    card.appendChild(el('div', { class: 'risk-score' }, ind.compound_stress != null ? ind.compound_stress.toFixed(2) : '\u2014'));
+    card.appendChild(el('div', { class: 'stat-sub' },
+      'Local ' + (ind.local_stress != null ? ind.local_stress.toFixed(2) : '\u2014') +
+      ' \u00b7 Systemic ' + (ind.systemic_exposure != null ? ind.systemic_exposure.toFixed(2) : '\u2014') +
+      ' \u00b7 Coverage ' + ((ind.coverage_score || 0) * 100).toFixed(0) + '%'));
 
-    var crVal = ind.compound_risk || 0;
+    var crVal = ind.compound_stress || 0;
     var track = el('div', { class: 'progress-track' });
     var fillColor = crVal >= 0.8 ? '#c0392b'
                   : crVal >= 0.6 ? '#e53e3e'
@@ -1486,23 +1519,23 @@ function renderRisk(riskData) {
 
     var subs = el('div', { class: 'sub-scores' });
     subs.style.gridTemplateColumns = '1fr 1fr 1fr 1fr';
+    var components = ind.components || {};
     [
-      ['NL', ind.nightlight_score], ['Fire', ind.fire_activity_score],
-      ['Trade', ind.trade_flow_score], ['NO\u2082', ind.no2_score],
-      ['Internet', ind.internet_score], ['Flights', ind.flight_score],
-      ['GDELT', ind.gdelt_score], ['Thermal', ind.thermal_score],
+      ['NL', components.nightlight], ['Fire', components.fire_activity],
+      ['NO\u2082', components.no2], ['Internet', components.internet],
+      ['Flights', components.flight_activity], ['GDELT', components.gdelt_narrative],
+      ['Thermal', components.thermal_evidence], ['Trade', components.systemic_trade],
     ].forEach(function (pair) {
       var item = el('div', { class: 'sub-score-item' });
       item.appendChild(el('div', { class: 'sub-score-label' }, pair[0]));
       item.appendChild(el('div', { class: 'sub-score-val' },
-        pair[1] != null ? pair[1].toFixed(2) : '\u2014'));
+        pair[1] && pair[1].score != null ? Number(pair[1].score).toFixed(2) : '\u2014'));
       subs.appendChild(item);
     });
     card.appendChild(subs);
     grid.appendChild(card);
   });
 
-  setText('stat-locations', String(indicators.length));
   setText('stat-alerts', emergency + '\u2009/\u2009' + critical);
   if (riskData.as_of) setText('stat-alerts-sub', 'As of ' + riskData.as_of);
 
@@ -1544,15 +1577,17 @@ function renderVegetationData(data) {
 
   var lowConfidence = 0;
   var negative = 0;
+  var comparable = 0;
   var latestDate = null;
   names.forEach(function (name) {
     var row = latest[name] || {};
-    if (row.confidence === 'low') lowConfidence++;
+    if (row.confidence !== 'moderate') lowConfidence++;
+    if (row.pct_change != null) comparable++;
     if (row.pct_change != null && row.pct_change < 0) negative++;
     if (!latestDate || row.date > latestDate) latestDate = row.date;
 
     var tr = el('tr');
-    if (row.confidence === 'low') tr.className = 'frp-high';
+    if (row.confidence !== 'moderate') tr.style.opacity = '0.65';
     tr.appendChild(el('td', { style: 'font-weight:500' }, name));
     tr.appendChild(el('td', null, row.country || '\u2014'));
     tr.appendChild(el('td', { class: 'mono', style: 'text-align:right' },
@@ -1570,8 +1605,10 @@ function renderVegetationData(data) {
 
   var summary = names.length + ' agricultural regions tracked';
   if (latestDate) summary += ' \u2022 latest: ' + latestDate;
-  summary += ' \u2022 ' + negative + ' below baseline';
-  summary += ' \u2022 ' + lowConfidence + ' low-confidence/cloud-affected';
+  summary += comparable
+    ? ' \u2022 ' + negative + ' of ' + comparable + ' comparable regions below baseline'
+    : ' \u2022 seasonal baseline unavailable; no change claim made';
+  summary += ' \u2022 ' + lowConfidence + ' low/unknown-confidence';
   setText('vegetation-summary', summary);
   setText('vegetation-freshness', latestDate ? 'Latest: ' + latestDate + ' \u2022 cloud fraction shown per region' : 'HLS/Sentinel-derived NDVI');
 
@@ -1583,7 +1620,7 @@ function renderVegetationData(data) {
     }
 
     var colors = series.map(function (row) {
-      if (row.confidence === 'low') return '#a0aec0';
+      if (row.confidence !== 'moderate') return '#a0aec0';
       if (row.pct_change == null) return '#2b6cb0';
       return row.pct_change < -10 ? '#c0392b' : row.pct_change < 0 ? '#ed8936' : '#38a169';
     });
@@ -1596,11 +1633,11 @@ function renderVegetationData(data) {
           return [row.pct_change, row.cloud_fraction, row.confidence, row.baseline_ndvi];
         }),
         type: 'scatter',
-        mode: 'lines+markers',
+        mode: series.length >= 8 ? 'lines+markers' : 'markers',
         name: 'Mean NDVI',
         line: { color: '#276749', width: 2 },
         marker: { size: 8, color: colors },
-        hovertemplate: '<b>%{x}</b><br>NDVI: %{y:.3f}<br>vs baseline: %{customdata[0]:+.1f}%<br>Cloud: %{customdata[1]:.0%}<br>Confidence: %{customdata[2]}<extra></extra>',
+        hovertemplate: '<b>%{x}</b><br>NDVI: %{y:.3f}<br>vs baseline: %{customdata[0]:.1f}%<br>Cloud: %{customdata[1]:.0%}<br>Confidence: %{customdata[2]}<extra></extra>',
       },
       {
         x: series.filter(function (row) { return row.baseline_ndvi != null; }).map(function (row) { return row.date; }),
@@ -1625,7 +1662,7 @@ function renderVegetationData(data) {
 
   var preferred = names.find(function (name) {
     var row = latest[name];
-    return row && row.pct_change != null && row.confidence !== 'low';
+    return row && row.pct_change != null && row.confidence === 'moderate';
   }) || names[0];
   select.value = preferred;
   draw(preferred);
@@ -1642,8 +1679,10 @@ function renderNLTable(nlAllData) {
   cities = cities.filter(isGulfCity);
   if (!cities.length) {
     var row = el('tr');
-    row.appendChild(el('td', { colspan: '4', class: 'empty-state' }, 'No nightlight data.'));
+    row.appendChild(el('td', { colspan: '4', class: 'empty-state' }, 'No quality-screened VNP46A2 observations.'));
     tbody.appendChild(row);
+    setText('stat-nl', '0');
+    setText('stat-nl-sub', 'No verified VNP46A2 rows');
     return;
   }
 
@@ -1687,6 +1726,7 @@ function renderNLTable(nlAllData) {
   });
 
   setText('stat-nl', String(rows.length));
+  setText('stat-nl-sub', 'Cities with verified VNP46A2 rows');
 }
 
 // ── vessel table ──────────────────────────────────────────────────────────────
@@ -1728,8 +1768,13 @@ function renderFireTable(infraFires) {
   var tbody = document.getElementById('fire-tbody');
   tbody.textContent = '';
 
-  var fires = (infraFires || []).filter(function (f) { return f && f.distance_km != null && f.distance_km <= 25; }).slice(0, 10);
+  var cutoff48h = Date.now() - 48 * 60 * 60 * 1000;
+  var fires = (infraFires || []).filter(function (f) {
+    return f && f.distance_km != null && f.distance_km <= 10
+      && new Date(f.detected_at).getTime() >= cutoff48h;
+  }).slice(0, 10);
   if (!fires.length) {
+    setText('stat-fires', '0');
     var row = el('tr');
     row.appendChild(el('td', { colspan: '6', class: 'empty-state' }, 'No infrastructure proximity alerts in the last 48h.'));
     tbody.appendChild(row);
@@ -1751,8 +1796,8 @@ function renderFireTable(infraFires) {
       f.frp != null ? frpVal.toFixed(1) + ' MW' : '— MW');
     tr.appendChild(frpTd);
 
-    var confMap = { h: 'conf-h', n: 'conf-n', l: 'conf-l' };
-    var confLabel = { h: 'High', n: 'Moderate', l: 'Low' };
+    var confMap = { high: 'conf-h', nominal: 'conf-n', low: 'conf-l', h: 'conf-h', n: 'conf-n', l: 'conf-l' };
+    var confLabel = { high: 'High', nominal: 'Moderate', low: 'Low', h: 'High', n: 'Moderate', l: 'Low' };
     tr.appendChild(el('td', { class: confMap[f.confidence] || '' }, confLabel[f.confidence] || f.confidence || ''));
     tbody.appendChild(tr);
   });
@@ -1792,7 +1837,8 @@ function renderMap(geojson) {
     var coords = f.geometry.coordinates;
     var frp = p.frp || 0;
     var radius = Math.min(4 + frp / 20, 18);
-    var color = p.confidence === 'h' ? '#c0392b' : p.confidence === 'n' ? '#ed8936' : '#f6e05e';
+    var color = (p.confidence === 'high' || p.confidence === 'h') ? '#c0392b'
+      : (p.confidence === 'nominal' || p.confidence === 'n') ? '#ed8936' : '#f6e05e';
 
     var popupDiv = document.createElement('div');
     var title = document.createElement('strong');
@@ -1805,7 +1851,7 @@ function renderMap(geojson) {
     }
 
     addLine('FRP', frp.toFixed ? frp.toFixed(1) + ' MW' : '— MW');
-    var confLabel = { h: 'High', n: 'Moderate', l: 'Low' };
+    var confLabel = { high: 'High', nominal: 'Moderate', low: 'Low', h: 'High', n: 'Moderate', l: 'Low' };
     addLine('Confidence', confLabel[p.confidence] || p.confidence || '');
     addLine('Satellite', p.satellite || '—');
     if (p.nearest_infrastructure) {
@@ -1901,9 +1947,11 @@ function renderInternetTable(data) {
     pctTd.appendChild(pctSpan(r.latest.pct_change));
     tr.appendChild(pctTd);
 
-    var conn = r.latest.connectivity;
-    var statusText = conn == null ? 'Unknown' : conn >= 0.8 ? 'Normal' : conn >= 0.5 ? 'Degraded' : conn >= 0.2 ? 'Severe' : 'Blackout';
-    var statusClass = conn == null ? 'status-unknown' : conn >= 0.8 ? 'status-operating' : conn >= 0.5 ? 'status-degraded' : 'status-damaged';
+    var state = r.latest.observation_state;
+    var delta = r.latest.pct_change;
+    var comparable = state !== 'unknown' && delta != null;
+    var statusText = !comparable ? 'Unknown' : delta <= -30 ? 'Large decline' : delta <= -10 ? 'Below baseline' : 'Near baseline';
+    var statusClass = !comparable ? 'status-unknown' : delta <= -30 ? 'status-damaged' : delta <= -10 ? 'status-degraded' : 'status-operating';
     var statusTd = el('td');
     statusTd.appendChild(el('span', { class: 'badge ' + statusClass }, statusText));
     tr.appendChild(statusTd);
@@ -1925,9 +1973,9 @@ function renderInternetChart(countryName) {
   var baseline = series.map(function (d) { return d.baseline; });
 
   var traces = [
-    { x: dates, y: conn, type: 'scatter', mode: 'lines+markers', name: 'Connectivity',
+    { x: dates, y: conn, type: 'scatter', mode: 'lines+markers', name: 'Normalized usage',
       line: { color: '#2b6cb0', width: 2 }, marker: { size: 4 },
-      hovertemplate: countryName + '<br>%{x|%Y-%m-%d}<br>Connectivity: %{y:.3f}<extra></extra>' },
+      hovertemplate: countryName + '<br>%{x|%Y-%m-%d}<br>Normalized usage: %{y:.3f}<extra></extra>' },
   ];
   if (baseline[0] != null) {
     traces.push({ x: dates, y: baseline, type: 'scatter', mode: 'lines', name: 'Baseline',
@@ -1941,7 +1989,7 @@ function renderInternetChart(countryName) {
     paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
     legend: { x: 0, y: 1.1, orientation: 'h', font: { size: 10 } },
     xaxis: { showgrid: false, tickfont: { size: 10 } },
-    yaxis: { title: 'Connectivity (0-1)', range: [0, 1.05], showgrid: true, gridcolor: '#edf2f7', titlefont: { size: 10 }, automargin: true },
+    yaxis: { title: 'IODA normalized usage signal', range: [0, 1.05], showgrid: true, gridcolor: '#edf2f7', titlefont: { size: 10 }, automargin: true },
   }, { responsive: true, displayModeBar: false });
 }
 
@@ -1965,11 +2013,11 @@ function renderInfraTable(data) {
   var facilities = Object.keys(data).sort();
   if (!facilities.length) {
     tbody.appendChild(el('tr')).appendChild(el('td', { colspan: '5', class: 'empty-state' }, 'No thermal signature data.'));
-    damageTbody.appendChild(el('tr')).appendChild(el('td', { colspan: '4', class: 'empty-state' }, 'No damage detected.'));
+    damageTbody.appendChild(el('tr')).appendChild(el('td', { colspan: '4', class: 'empty-state' }, 'No persistent anomaly evidence available.'));
     return;
   }
 
-  var damageCount = 0;
+  var evidenceFacilities = {};
 
   facilities.forEach(function (name) {
     var series = data[name];
@@ -1979,12 +2027,17 @@ function renderInfraTable(data) {
     tr.appendChild(el('td', { style: 'font-weight:500' }, name.length > 25 ? name.slice(0, 25) + '\u2026' : name));
     tr.appendChild(el('td', { style: 'font-size:11px;color:var(--slate-lt)' }, latest.profile || ''));
 
-    var statusText = (latest.status || 'unknown').toUpperCase();
-    var statusClass = 'status-' + (latest.status || 'unknown');
-    if (latest.data_caveat) {
-      statusText = 'No Data';
-      statusClass = 'status-unknown';
-    }
+    var evidenceLabels = {
+      no_qualifying_anomaly: 'No qualifying anomaly',
+      thermal_anomaly_near_site: 'Anomaly near site',
+      persistent_anomaly: 'Persistent anomaly',
+      corroborated_disruption: 'Corroborated disruption',
+      unknown: 'Unknown',
+    };
+    var evidence = latest.observation_state === 'observed' ? latest.evidence_state : 'unknown';
+    var statusText = evidenceLabels[evidence] || 'Unknown';
+    var statusClass = evidence === 'persistent_anomaly' || evidence === 'corroborated_disruption'
+      ? 'status-degraded' : 'status-unknown';
     var statusTd = el('td');
     statusTd.appendChild(el('span', { class: 'badge ' + statusClass, title: latest.data_caveat || '' }, statusText));
     tr.appendChild(statusTd);
@@ -1994,26 +2047,27 @@ function renderInfraTable(data) {
       latest.max_frp != null ? latest.max_frp.toFixed(1) + ' MW' : '—'));
     tbody.appendChild(tr);
 
-    // Collect damage events
+    // Collect persistent, multi-overpass evidence. This is not a damage claim.
     series.forEach(function (s) {
-      if (s.damage) {
-        damageCount++;
+      if (s.evidence_state === 'persistent_anomaly' || s.evidence_state === 'corroborated_disruption') {
+        evidenceFacilities[name] = true;
         var dr = el('tr');
-        dr.appendChild(el('td', { style: 'font-weight:500;color:var(--red)' }, name.length > 25 ? name.slice(0, 25) + '\u2026' : name));
+        dr.appendChild(el('td', { style: 'font-weight:500;color:var(--amber)' }, name.length > 25 ? name.slice(0, 25) + '\u2026' : name));
         dr.appendChild(el('td', { class: 'mono' }, s.date));
         dr.appendChild(el('td', { class: 'mono', style: 'text-align:right' }, String(s.fire_count || 0)));
-        dr.appendChild(el('td', { class: 'mono', style: 'text-align:right;color:var(--red);font-weight:600' },
+        dr.appendChild(el('td', { class: 'mono', style: 'text-align:right;color:var(--amber);font-weight:600' },
           s.max_frp != null ? s.max_frp.toFixed(1) + ' MW' : '—'));
         damageTbody.appendChild(dr);
       }
     });
   });
 
-  setText('stat-damaged', String(damageCount));
+  var evidenceCount = Object.keys(evidenceFacilities).length;
+  setText('stat-damaged', String(evidenceCount));
 
-  if (damageCount === 0) {
+  if (evidenceCount === 0) {
     var row = el('tr');
-    row.appendChild(el('td', { colspan: '4', class: 'empty-state' }, 'No damage events detected.'));
+    row.appendChild(el('td', { colspan: '4', class: 'empty-state' }, 'No persistent multi-overpass anomalies in this export.'));
     damageTbody.appendChild(row);
   }
 }
@@ -2028,7 +2082,7 @@ function renderFlightData(data) {
 
   if (!airports.length) {
     tbody.textContent = '';
-    tbody.appendChild(el('tr')).appendChild(el('td', { colspan: '5', class: 'empty-state' }, 'No flight data available.'));
+    tbody.appendChild(el('tr')).appendChild(el('td', { colspan: '6', class: 'empty-state' }, 'No flight data available.'));
     return;
   }
 
@@ -2045,8 +2099,9 @@ function renderFlightData(data) {
     var series = data[selected] || [];
 
     var dates = series.map(function (s) { return s.date; });
-    var arrivals = series.map(function (s) { return s.arrivals; });
-    var departures = series.map(function (s) { return s.departures; });
+    var usableStates = ['observed', 'observed_zero', 'partial'];
+    var arrivals = series.map(function (s) { return usableStates.indexOf(s.observation_state) >= 0 ? s.arrivals : null; });
+    var departures = series.map(function (s) { return usableStates.indexOf(s.observation_state) >= 0 ? s.departures : null; });
 
     Plotly.newPlot('flight-chart', [
       { x: dates, y: arrivals, name: 'Arrivals', type: 'bar', marker: { color: '#2b6cb0' } },
@@ -2071,17 +2126,19 @@ function renderFlightData(data) {
     tbody.textContent = '';
     series.forEach(function (s) {
       var tr = el('tr');
+      var usable = ['observed', 'observed_zero', 'partial'].indexOf(s.observation_state) >= 0;
       tr.appendChild(el('td', { style: 'font-weight:500' }, selected));
       tr.appendChild(el('td', { class: 'mono', style: 'color:var(--slate-lt)' }, s.date));
-      tr.appendChild(el('td', { class: 'mono', style: 'text-align:right' }, String(s.arrivals)));
-      tr.appendChild(el('td', { class: 'mono', style: 'text-align:right' }, String(s.departures)));
+      tr.appendChild(el('td', { class: 'mono', style: 'text-align:right' }, usable ? String(s.arrivals) : '\u2014'));
+      tr.appendChild(el('td', { class: 'mono', style: 'text-align:right' }, usable ? String(s.departures) : '\u2014'));
       var totalStyle = 'text-align:right;font-weight:600';
-      if (s.total === 0) totalStyle += ';color:var(--red)';
-      tr.appendChild(el('td', { class: 'mono', style: totalStyle }, String(s.total)));
+      if (s.observation_state === 'observed_zero') totalStyle += ';color:var(--amber)';
+      tr.appendChild(el('td', { class: 'mono', style: totalStyle }, usable ? String(s.total) : '\u2014'));
+      tr.appendChild(el('td', null, usable ? s.observation_state.replace('_', ' ') : 'No verified coverage'));
       tbody.appendChild(tr);
     });
     if (!series.length) {
-      tbody.appendChild(el('tr')).appendChild(el('td', { colspan: '5', class: 'empty-state' }, 'No data for this airport.'));
+      tbody.appendChild(el('tr')).appendChild(el('td', { colspan: '6', class: 'empty-state' }, 'No data for this airport.'));
     }
   }
 
@@ -2122,17 +2179,37 @@ Promise.all([
 
   if (meta.generated_at) {
     var gd = new Date(meta.generated_at);
-    var fmtd = gd.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-    setText('topbar-updated', 'Updated ' + fmtd);
+    var fmtd = gd.toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    setText('topbar-updated', 'Exported ' + fmtd);
     setText('footer-right', fmtd + ' \u2022 Baseline: 15 Jan \u2013 27 Feb 2026');
   }
+  if (risk.as_of) setText('topbar-model', 'Model ' + risk.as_of);
+  if (meta.latest_ingestion_at) {
+    setText('topbar-ingested', 'Ingested ' + fmtDate(meta.latest_ingestion_at));
+  } else {
+    setText('topbar-ingested', 'Ingested: no v2 run yet');
+  }
+  var freshness = meta.freshness || {};
+  var latestObserved = null;
+  var staleParts = [];
+  Object.keys(freshness).forEach(function (source) {
+    var latest = freshness[source] && freshness[source].latest;
+    if (!latest) {
+      staleParts.push(source + ': unavailable');
+      return;
+    }
+    if (!latestObserved || latest > latestObserved) latestObserved = latest;
+    var age = Math.max(0, Math.floor((Date.now() - new Date(latest + 'T00:00:00Z').getTime()) / 86400000));
+    if (age > 3) staleParts.push(source + ': ' + age + 'd old');
+  });
+  if (latestObserved) setText('topbar-observed', 'Observed ' + latestObserved);
   if (meta.situation_brief) {
     setText('brief-text', meta.situation_brief);
     setText('brief-date', meta.generated_at ? fmtDate(meta.generated_at) : '');
   }
-  if (meta.stale_warning) {
+  if (staleParts.length) {
     var staleBanner = document.getElementById('stale-banner');
-    staleBanner.textContent = meta.stale_warning;
+    staleBanner.textContent = 'Data freshness: ' + staleParts.join(' \u00b7 ') + '. Interpret stale or unavailable sources as unknown.';
     staleBanner.style.display = 'block';
   }
 
@@ -2162,8 +2239,12 @@ Promise.all([
 // ── NZ data ──────────────────────────────────────────────────────────────────
 var nzMapInitialised = false;
 var nzNlData = {};
+var nzDataLoaded = false;
 
-load(DATA + '/nz.json?v=' + NZ_DATA_VERSION).then(function (nz) {
+function loadNZData() {
+  if (nzDataLoaded) return;
+  nzDataLoaded = true;
+  load(DATA + '/nz.json?v=' + NZ_DATA_VERSION).then(function (nz) {
   renderNZAssetTable(nz.asset_counts, 'marina', 'vessel', 'nz-marina-tbody');
   renderNZAssetTable(nz.asset_counts, 'airport', 'aircraft', 'nz-airport-tbody');
   renderNZSarTable(nz.sar);
@@ -2187,11 +2268,13 @@ load(DATA + '/nz.json?v=' + NZ_DATA_VERSION).then(function (nz) {
   setText('nz-stat-sar-sub', qualitySub(q.sar, 'Sentinel-1 approach/marina'));
   setText('nz-stat-adsb-sub', qualitySub(q.airport_adsb, 'OpenSky movements'));
 }).catch(function () {
+  nzDataLoaded = false;
   var nzGrid = document.getElementById('nz-pressure-grid');
   nzGrid.textContent = '';
   var msg = el('p', { class: 'empty-state', style: 'grid-column:1/-1' }, 'NZ data not available. Check that nz.json exists in the data directory.');
   nzGrid.appendChild(msg);
 });
+}
 
 function qualityCount(q) {
   if (!q || q.rows == null) return '\u2014';
@@ -2448,11 +2531,16 @@ function initNZCitySelect(cities) {
 }
 
 // ── Fuel Security data ────────────────────────────────────────────────────
-load(DATA + '/fuel_security.json').then(function (fuel) {
+var fuelDataLoaded = false;
+function loadFuelData() {
+  if (fuelDataLoaded) return;
+  fuelDataLoaded = true;
+  load(DATA + '/fuel_security.json').then(function (fuel) {
   renderFuelSecurity(fuel);
   renderScenarioProjections(fuel);
   renderUpstreamIndicators(fuel);
 }).catch(function () {
+  fuelDataLoaded = false;
   var cards = document.getElementById('fuel-stock-cards');
   if (cards) {
     cards.textContent = '';
@@ -2464,6 +2552,7 @@ load(DATA + '/fuel_security.json').then(function (fuel) {
 load(DATA + '/sar.json').then(function (sar) {
   renderFuelHormuzChart(sar);
 }).catch(function () {});
+}
 
 function renderFuelSecurity(fuel) {
   var ind = fuel.indicator;
@@ -2483,14 +2572,14 @@ function renderFuelSecurity(fuel) {
   setText('fuel-date', ind.date);
 
   // Countdown
-  if (ind.estimated_days_to_mso != null) {
-    setText('fuel-countdown-days', Math.round(ind.estimated_days_to_mso));
+  if (ind.estimated_days_to_supply_pressure != null) {
+    setText('fuel-countdown-days', Math.round(ind.estimated_days_to_supply_pressure));
   } else {
     setText('fuel-countdown-days', 'N/A');
   }
-  if (ind.estimated_rationing_date) {
-    setText('fuel-rationing-date', 'Projected rationing: ' + ind.estimated_rationing_date);
-  }
+  setText('fuel-rationing-date', ind.estimated_supply_pressure_date
+    ? 'Modeled pressure threshold: ' + ind.estimated_supply_pressure_date
+    : 'No pressure-threshold date within the current model horizon');
 
   // Stock cards
   var proj = ind.depletion_projections || {};
@@ -2509,7 +2598,7 @@ function renderFuelSecurity(fuel) {
 
     // Bar showing current stock vs capacity
     var maxDays = Math.max(p.onshore_days + (p.on_water_days || 0) + 10, 70);
-    var mso = p.mso_minimum;
+    var pressureThreshold = p.operational_pressure_threshold_days || 14;
     var onshore = p.projected_onshore;
     var total = p.total_effective;
 
@@ -2524,16 +2613,16 @@ function renderFuelSecurity(fuel) {
     }
 
     // Onshore fill
-    var barColor = onshore < mso ? 'var(--red)' : onshore < mso * 1.5 ? '#ed8936' : fuelColors[ft];
+    var barColor = total < pressureThreshold ? 'var(--red)' : total < pressureThreshold * 2 ? '#ed8936' : fuelColors[ft];
     var fill = el('div', { class: 'fuel-bar-fill', style: 'width:' + onshoreWidth + '%;background:' + barColor });
     track.appendChild(fill);
 
-    // MSO line
-    var msoPos = (mso / maxDays * 100);
-    var msoLine = el('div', { class: 'fuel-bar-mso', style: 'left:' + msoPos + '%' });
-    var msoLabel = el('div', { class: 'fuel-bar-mso-label', style: 'left:' + msoPos + '%' }, 'MSO ' + mso + 'd');
-    track.appendChild(msoLine);
-    track.appendChild(msoLabel);
+    // Operational scenario threshold (not a statutory MSO line).
+    var thresholdPos = (pressureThreshold / maxDays * 100);
+    var thresholdLine = el('div', { class: 'fuel-bar-mso', style: 'left:' + thresholdPos + '%' });
+    var thresholdLabel = el('div', { class: 'fuel-bar-mso-label', style: 'left:' + thresholdPos + '%' }, 'Pressure ' + pressureThreshold + 'd');
+    track.appendChild(thresholdLine);
+    track.appendChild(thresholdLabel);
 
     card.appendChild(track);
 
@@ -2546,15 +2635,13 @@ function renderFuelSecurity(fuel) {
     if (p.cape_delay_days > 0) {
       card.appendChild(el('div', { style: 'font-size:10px;color:var(--amber);margin-top:4px' }, 'Cape rerouting adds ' + p.cape_delay_days + ' days — on-water stock adjusted'));
     }
-    var headlineDays = p.effective_days_to_mso != null ? p.effective_days_to_mso : p.days_to_mso;
+    var headlineDays = p.days_to_supply_pressure;
     if (headlineDays != null) {
       card.appendChild(el('div', { style: 'font-size:11px;margin-top:4px;font-weight:500;color:' + (headlineDays < 30 ? 'var(--red)' : 'var(--text)') },
-        headlineDays.toFixed(0) + ' effective days to MSO minimum'));
-      if (p.days_to_mso != null && p.effective_days_to_mso != null) {
-        card.appendChild(el('div', { style: 'font-size:10px;color:var(--slate-lt);margin-top:2px' },
-          'Onshore-only stress test: ' + p.days_to_mso.toFixed(0) + ' days'));
-      }
+        headlineDays.toFixed(0) + ' modeled days to 14-day operational pressure threshold'));
     }
+    card.appendChild(el('div', { style: 'font-size:10px;color:var(--slate-lt);margin-top:2px' },
+      'MSO compliance not assessed: legally eligible incoming stock is not identified.'));
 
     stockCards.appendChild(card);
   });
@@ -2594,9 +2681,9 @@ function renderFuelSecurity(fuel) {
   compEl.textContent = '';
 
   var compLabels = [
-    ['hormuz_disruption', 'Hormuz Disruption', '30%', 'SAR vessel detections at Strait of Hormuz vs pre-war baseline. Sigmoid midpoint at -30% drop. Current Hormuz is at ~45% of normal traffic.'],
-    ['stock_depletion', 'Stock Depletion', '25%', 'Worst fuel type\u2019s effective total days above MSO minimum: in-country stock plus adjusted on-water stock.'],
-    ['price_acceleration', 'Price Acceleration', '20%', 'Average week-on-week % change in MBIE retail fuel prices (all types). Sigmoid midpoint at +10% weekly change.'],
+    ['hormuz_disruption', 'Hormuz Disruption', '30%', 'Verified commercial crossings are preferred; coverage-normalized SAR is a separate corroborating series.'],
+    ['stock_depletion', 'Stock Depletion', '25%', 'Effective physical cover: in-country stock plus adjusted on-water stock. This is not an MSO compliance calculation.'],
+    ['price_acceleration', 'Price Change', '20%', 'Average change from the stored pre-war MBIE retail-price baseline; not week-on-week acceleration.'],
     ['supply_chain', 'Supply Chain', '10%', 'Correlated with Hormuz disruption (0.8x dampening). Proxies for refinery-level disruption downstream of crude supply cuts.'],
     ['demand_signal', 'Demand Signal', '10%', 'NZ flight activity (OpenSky ADS-B) as demand proxy. Falling flights = demand destruction / self-rationing. Sigmoid midpoint at -15%.'],
     ['gdelt_narrative', 'GDELT Narrative', '5%', 'GDELT crisis event mentions of fuel shortage in NZ media. Sigmoid midpoint at 5 events. Currently limited by API rate limits.'],
@@ -2913,7 +3000,7 @@ function renderRetailBasketHistory(referenceBasket) {
       mode: 'lines+markers',
       line: { color: '#2b6cb0', width: 2 },
       marker: { size: 6 },
-      hovertemplate: '<b>Full named basket</b><br>$%{y:.2f}<br>%{x}<br>Change: %{customdata[0]:+.1f}%<br>Matched: %{customdata[1]} items<br>Low stock: %{customdata[2]}<extra></extra>',
+      hovertemplate: '<b>Full named basket</b><br>$%{y:.2f}<br>%{x}<br>Change: %{customdata[0]:.1f}%<br>Matched: %{customdata[1]} items<br>Low stock: %{customdata[2]}<extra></extra>',
     });
   }
 
@@ -2929,7 +3016,7 @@ function renderRetailBasketHistory(referenceBasket) {
       mode: 'lines+markers',
       line: { color: '#276749', width: 2 },
       marker: { size: 6 },
-      hovertemplate: '<b>Food staples subset</b><br>$%{y:.2f}<br>%{x}<br>Change: %{customdata[0]:+.1f}%<br>Items: %{customdata[1]}<extra></extra>',
+      hovertemplate: '<b>Food staples subset</b><br>$%{y:.2f}<br>%{x}<br>Change: %{customdata[0]:.1f}%<br>Items: %{customdata[1]}<extra></extra>',
     });
   }
 
@@ -2977,10 +3064,11 @@ function renderScenarioProjections(fuel) {
   };
   var msoMins = { petrol: 28, diesel: 21, jet: 24 };
   var fuelLabels = { petrol: 'Petrol', diesel: 'Diesel', jet: 'Jet Fuel' };
+  var scenarioAsOf = new Date((scenarios.as_of_date || scenarios.current_state.measurement_date) + 'T00:00:00Z');
 
   function renderChart(fuelType) {
     var traces = [];
-    var today = new Date();
+    var asOf = scenarioAsOf;
 
     scenarioOrder.forEach(function (key) {
       var proj = scenarios.projections[key];
@@ -2988,13 +3076,13 @@ function renderScenarioProjections(fuel) {
 
       var weeks = proj.weeks;
       var x = weeks.map(function (w) {
-        var d = new Date(today);
+        var d = new Date(asOf);
         d.setDate(d.getDate() + w.week * 7);
         return d.toISOString().slice(0, 10);
       });
       var y = weeks.map(function (w) {
         var ft = w[fuelType];
-        return ft ? ft.onshore : null;
+        return ft ? ft.total : null;
       });
 
       traces.push({
@@ -3005,14 +3093,29 @@ function renderScenarioProjections(fuel) {
         line: { color: scenarioColors[key], width: key === 'status_quo' ? 3 : 2, dash: scenarioDash[key] },
         hovertemplate: '<b>' + proj.label + '</b><br>' + fuelLabels[fuelType] + ': %{y:.1f} days<br>%{x}<extra></extra>',
       });
+      if (key === 'status_quo') {
+        traces.push({
+          x: x,
+          y: weeks.map(function (w) { return w[fuelType] ? w[fuelType].total_sensitivity_high : null; }),
+          type: 'scatter', mode: 'lines', line: { width: 0 }, showlegend: false,
+          hoverinfo: 'skip',
+        });
+        traces.push({
+          x: x,
+          y: weeks.map(function (w) { return w[fuelType] ? w[fuelType].total_sensitivity_low : null; }),
+          type: 'scatter', mode: 'lines', line: { width: 0 }, fill: 'tonexty',
+          fillcolor: 'rgba(229,62,62,0.10)', name: 'Status quo sensitivity (\u00b120%)',
+          hoverinfo: 'skip',
+        });
+      }
     });
 
-    // MSO reference line
-    var mso = msoMins[fuelType];
+    // Operational pressure reference line; MSO needs eligible-stock data.
+    var pressure = 14;
     traces.push({
       x: [traces[0].x[0], traces[0].x[Math.min(25, traces[0].x.length - 1)]],
-      y: [mso, mso],
-      name: 'MSO Minimum (' + mso + 'd)',
+      y: [pressure, pressure],
+      name: 'Operational pressure threshold (14d)',
       type: 'scatter',
       mode: 'lines',
       line: { color: 'var(--red)', width: 1, dash: 'dot' },
@@ -3035,7 +3138,7 @@ function renderScenarioProjections(fuel) {
     Plotly.newPlot('scenario-chart', traces, {
       margin: { t: 10, r: 20, b: 40, l: 50 },
       xaxis: { title: '', gridcolor: '#edf2f7' },
-      yaxis: { title: 'Onshore supply (days)', gridcolor: '#edf2f7', rangemode: 'tozero' },
+      yaxis: { title: 'Effective physical cover (days)', gridcolor: '#edf2f7', rangemode: 'tozero' },
       legend: { orientation: 'h', y: -0.15, x: 0.5, xanchor: 'center', font: { size: 11 } },
       plot_bgcolor: 'rgba(0,0,0,0)',
       paper_bgcolor: 'rgba(0,0,0,0)',
@@ -3059,17 +3162,17 @@ function renderScenarioProjections(fuel) {
   var comp = scenarios.comparison || {};
   var interventionEl = document.getElementById('scenario-intervention');
   if (interventionEl && comp.window_of_intervention) {
-    interventionEl.textContent = 'Onshore-only stress test: ' + comp.window_of_intervention;
+    interventionEl.textContent = comp.window_of_intervention + ' Sensitivity bands are deterministic, not probability intervals.';
     interventionEl.style.display = 'block';
   }
 
   // Comparison table
   var compEl = document.getElementById('scenario-comparison');
-  if (compEl && comp.rationing_dates) {
+  if (compEl && comp.supply_pressure_dates) {
     var table = el('table', { class: 'cascade-table' });
     var thead = el('thead');
     var hrow = el('tr');
-    ['Scenario', 'Onshore MSO Breach', 'Recovery', 'Status'].forEach(function (h) {
+    ['Scenario', '14-day Pressure Threshold', 'Modeled Recovery', 'Status'].forEach(function (h) {
       hrow.appendChild(el('th', null, h));
     });
     thead.appendChild(hrow);
@@ -3079,22 +3182,22 @@ function renderScenarioProjections(fuel) {
     scenarioOrder.forEach(function (key) {
       var proj = scenarios.projections[key];
       if (!proj) return;
-      var rat = comp.rationing_dates[key];
+      var rat = comp.supply_pressure_dates[key];
       var rec = (comp.recovery_dates || {})[key];
 
       var row = el('tr');
       if (rat && !rec) row.className = 'imminent';
 
       row.appendChild(el('td', { style: 'font-weight:500' }, proj.label));
-      row.appendChild(el('td', null, rat || 'Averted'));
+      row.appendChild(el('td', null, rat || 'Not reached'));
 
       var recText = rec || (rat ? 'Never' : '—');
       row.appendChild(el('td', null, recText));
 
       var status, statusColor;
-      if (!rat) { status = 'AVERTED'; statusColor = '#48bb78'; }
-      else if (new Date(rat) <= new Date()) { status = 'BREACHED'; statusColor = 'var(--red)'; }
-      else { status = 'PROJECTED'; statusColor = '#ed8936'; }
+      if (!rat) { status = 'NOT REACHED'; statusColor = '#48bb78'; }
+      else if (new Date(rat + 'T00:00:00Z') <= scenarioAsOf) { status = 'AT / BELOW THRESHOLD'; statusColor = 'var(--red)'; }
+      else { status = 'MODELED'; statusColor = '#ed8936'; }
       row.appendChild(el('td', { style: 'font-weight:600;color:' + statusColor }, status));
 
       tbody.appendChild(row);
@@ -3118,7 +3221,7 @@ function renderFuelHormuzChart(sar) {
     x: dates, y: counts, name: 'Vessel count (coverage-normalised)', type: 'scatter',
     mode: 'lines+markers', line: { color: '#3182ce', width: 2 }, marker: { size: 5 },
     customdata: pctChanges,
-    hovertemplate: '<b>%{x}</b><br>Vessels: %{y:.0f}<br>vs baseline: %{customdata:+.1f}%<extra></extra>',
+    hovertemplate: '<b>%{x}</b><br>Vessels: %{y:.0f}<br>vs baseline: %{customdata:.1f}%<extra></extra>',
   }];
   if (baseline) {
     traces.push({
@@ -3286,6 +3389,8 @@ function renderUpstreamIndicators(fuel) {
 
 // ── tab switching ─────────────────────────────────────────────────────────
 window.switchTab = function switchTab(tab) {
+  if (tab === 'nz') loadNZData();
+  if (tab === 'fuel') loadFuelData();
   document.querySelectorAll('.tab-section').forEach(function (s) { s.classList.remove('active'); });
   document.querySelectorAll('.tab-btn').forEach(function (b) {
     b.classList.remove('active', 'nz-active');
