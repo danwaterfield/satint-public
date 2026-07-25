@@ -519,17 +519,17 @@
   <div class="two-col">
     <div class="card">
       <div class="section-header">
-        <span class="section-title">Maritime Chokepoint Traffic</span>
-        <span class="section-meta">Vessel transits vs. pre-war baseline</span>
+        <span class="section-title">Sentinel-1 SAR Vessel Density</span>
+        <span class="section-meta">Coverage-normalised detections vs. a SAR baseline; not commercial transits</span>
       </div>
       <div class="table-wrap">
       <table>
-        <caption class="sr-only">Maritime chokepoint vessel transit counts vs pre-war baseline</caption>
+        <caption class="sr-only">Coverage-normalised SAR vessel detections vs pre-war SAR baseline</caption>
         <thead>
           <tr>
             <th scope="col">Chokepoint</th>
             <th scope="col">Source</th>
-            <th scope="col" style="text-align:right">Count</th>
+            <th scope="col" style="text-align:right">Normalised</th>
             <th scope="col" style="text-align:right">Baseline</th>
             <th scope="col" style="text-align:right">Change</th>
           </tr>
@@ -820,7 +820,7 @@
   <div>
     <div class="section-header">
       <span class="section-title">Migration Pressure Indicators</span>
-      <span class="section-meta">Weighted: marina 25% &bull; airport 25% &bull; nightlight 15% &bull; SAR 15% &bull; Gulf push 20%</span>
+      <span class="section-meta">Published only when local signals and the Gulf stress input pass their coverage gates</span>
     </div>
     <div class="risk-grid" id="nz-pressure-grid">
       <p class="empty-state" style="grid-column:1/-1">Loading NZ migration data…</p>
@@ -839,7 +839,7 @@
     <div class="card">
       <div class="section-header">
         <span class="section-title">Nighttime Radiance — NZ</span>
-        <span class="section-meta">Auckland &amp; Queenstown activity proxy</span>
+        <span class="section-meta">Provisional raw DNB radiance; no cross-product baseline comparison</span>
       </div>
       <div class="chart-controls">
         <label for="nz-city-select">Location</label>
@@ -886,7 +886,7 @@
   <div class="card">
     <div class="section-header">
       <span class="section-title">Airport Activity Fallback</span>
-      <span class="section-meta">OpenSky ADS-B daily movements — stronger than optical apron counts</span>
+      <span class="section-meta">Raw OpenSky ADS-B movements; baseline comparison withheld pending source-matched backfill</span>
     </div>
     <div class="table-wrap">
     <table>
@@ -903,12 +903,12 @@
   <div class="card">
     <div class="section-header">
       <span class="section-title">SAR Vessel Detections — NZ</span>
-      <span class="section-meta">Sentinel-1 SAR — approaches &amp; marinas</span>
+      <span class="section-meta">Sentinel-1 SAR — coverage-normalised approaches &amp; marinas</span>
     </div>
     <div class="table-wrap">
     <table>
       <caption class="sr-only">SAR vessel detections for NZ monitoring locations</caption>
-      <thead><tr><th scope="col">Location</th><th scope="col">Date</th><th scope="col" style="text-align:right">Vessels</th><th scope="col" style="text-align:right">Baseline</th><th scope="col" style="text-align:right">Change</th><th scope="col" style="text-align:right">Coverage</th></tr></thead>
+      <thead><tr><th scope="col">Location</th><th scope="col">Date</th><th scope="col" style="text-align:right">Normalised</th><th scope="col" style="text-align:right">Baseline</th><th scope="col" style="text-align:right">Change</th><th scope="col" style="text-align:right">Coverage</th></tr></thead>
       <tbody id="nz-sar-tbody">
         <tr><td colspan="6" class="empty-state">Loading…</td></tr>
       </tbody>
@@ -1739,7 +1739,7 @@ function renderVesselTable(sarData) {
   entries = entries.filter(function (e) { return NZ_LOCATIONS.indexOf(e[0]) === -1; });
   if (!entries.length) {
     var row = el('tr');
-    row.appendChild(el('td', { colspan: '5', class: 'empty-state' }, 'No vessel data — SAR processing pending.'));
+    row.appendChild(el('td', { colspan: '5', class: 'empty-state' }, 'No SAR density data — processing pending.'));
     tbody.appendChild(row);
     return;
   }
@@ -1751,8 +1751,9 @@ function renderVesselTable(sarData) {
 
     var tr = el('tr');
     tr.appendChild(el('td', {}, chokepoint.length > 20 ? chokepoint.slice(0, 20) + '…' : chokepoint));
-    tr.appendChild(el('td', { style: 'color:var(--slate-lt)' }, 'SAR \u00b7 ' + latest.date));
-    tr.appendChild(el('td', { class: 'mono', style: 'text-align:right' }, String(latest.vessel_count)));
+    tr.appendChild(el('td', { style: 'color:var(--slate-lt)' }, 'SAR density \u00b7 ' + latest.date));
+    tr.appendChild(el('td', { class: 'mono', style: 'text-align:right' },
+      latest.normalised_count != null ? latest.normalised_count.toFixed(0) : '\u2014'));
     tr.appendChild(el('td', { class: 'mono', style: 'text-align:right' },
       latest.baseline_count != null ? latest.baseline_count.toFixed(0) : '—'));
 
@@ -2303,7 +2304,7 @@ function renderNZQuality(quality) {
     ['Marina optical', quality.marina_optical, 'Sentinel-2 rows are mostly clouded; treat marina bright-object counts as experimental until a clearer backfill exists.'],
     ['Airport optical', quality.airport_optical, 'Sentinel-2 apron counts are too sparse for current airport inference; prefer the ADS-B fallback below.'],
     ['Approach / marina SAR', quality.sar, 'Sentinel-1 detects vessels without cloud, but this export is stale and has too few dates for a live baseline.'],
-    ['Airport ADS-B', quality.airport_adsb, 'Operational fallback for monitored airports; not satellite data, but materially stronger for movement baselines.'],
+    ['Airport ADS-B', quality.airport_adsb, 'Raw movement counts are retained; percentage comparisons are withheld until a verified, source-matched pre-war baseline exists.'],
   ];
 
   rows.forEach(function (row) {
@@ -2394,7 +2395,8 @@ function renderNZSarTable(sarData) {
     var tr = el('tr');
     tr.appendChild(el('td', { style: 'font-weight:500' }, name));
     tr.appendChild(el('td', { class: 'mono', style: 'color:var(--slate-lt)' }, latest.date));
-    tr.appendChild(el('td', { class: 'mono', style: 'text-align:right' }, String(latest.vessel_count)));
+    tr.appendChild(el('td', { class: 'mono', style: 'text-align:right' },
+      latest.normalised_count != null ? latest.normalised_count.toFixed(0) : '\u2014'));
     tr.appendChild(el('td', { class: 'mono', style: 'text-align:right' }, latest.baseline != null ? latest.baseline.toFixed(0) : '\u2014'));
     var pctTd = el('td', { class: 'mono', style: 'text-align:right' });
     pctTd.appendChild(pctSpan(latest.pct_change));
@@ -2441,7 +2443,7 @@ function renderNZPressureGrid(migData) {
   var cities = Object.keys(migData);
   if (!cities.length) {
     grid.appendChild(el('p', { class: 'empty-state', style: 'grid-column:1/-1' },
-      'Migration pressure data not yet computed.'));
+      'Migration pressure score withheld because its inputs do not meet the publication coverage threshold.'));
     return;
   }
 
