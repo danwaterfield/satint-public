@@ -1,1 +1,1 @@
-[]
+[{"lat":27.0172,"lon":49.5784,"frp":32.1,"confidence":"nominal","satellite":"VIIRS_NOAA20_NRT","detected_at":"2026-07-23T10:43:00+00:00","infrastructure":"Jubail Desal","distance_km":8.0},{"lat":25.8855,"lon":51.5368,"frp":31.3,"confidence":"low","satellite":"VIIRS_SNPP_NRT","detected_at":"2026-07-23T10:26:00+00:00","infrastructure":"Ras Laffan Desal","distance_km":3.5},{"lat":27.0149,"lon":49.58,"frp":30.9,"confidence":"low","satellite":"VIIRS_NOAA20_NRT","detected_at":"2026-07-24T10:26:00+00:00","infrastructure":"Jubail Desal","distance_km":7.8}]
