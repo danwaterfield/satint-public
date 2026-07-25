@@ -153,16 +153,32 @@ class Command(BaseCommand):
                 )
 
         # Hormuz commercial traffic (prefer verified OSINT over raw SAR)
-        latest_commercial = (
-            CommercialTransit.objects.filter(chokepoint="hormuz")
-            .order_by("-date")
-            .first()
-        )
+        latest_commercial = None
+        commercial_cutoff = today - timedelta(days=10)
+        for source in ("portwatch", "windward", "manual"):
+            latest_commercial = (
+                CommercialTransit.objects.filter(
+                    chokepoint="hormuz",
+                    source=source,
+                    date__gte=commercial_cutoff,
+                )
+                .order_by("-date")
+                .first()
+            )
+            if latest_commercial:
+                break
         if latest_commercial and latest_commercial.pct_change is not None:
+            source_label = {
+                "portwatch": "IMF PortWatch",
+                "windward": "Windward",
+                "manual": "Curated OSINT",
+            }.get(latest_commercial.source, latest_commercial.source)
             brief_parts.append(
-                f"Strait of Hormuz commercial shipping at "
-                f"{latest_commercial.crossings} vessels/day "
-                f"({latest_commercial.pct_change:+.0f}% vs pre-war baseline of {latest_commercial.baseline_crossings:.0f})"
+                f"{source_label} recorded "
+                f"{latest_commercial.crossings} commercial transits through the Strait of Hormuz "
+                f"on {latest_commercial.date:%-d %B} "
+                f"({latest_commercial.pct_change:+.0f}% vs its source-matched pre-war baseline "
+                f"of {latest_commercial.baseline_crossings:.0f})"
             )
         else:
             latest_sar = (
