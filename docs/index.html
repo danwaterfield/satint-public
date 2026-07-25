@@ -459,8 +459,8 @@
     </div>
     <div class="card">
       <div class="section-header">
-        <span class="section-title">Hormuz Vessel Traffic</span>
-        <span class="section-meta" id="hormuz-freshness">SAR coverage-normalised vessel count</span>
+        <span class="section-title">Hormuz SAR Vessel Density</span>
+        <span class="section-meta" id="hormuz-freshness">Sentinel-1 detections adjusted for scene coverage; not commercial transit</span>
       </div>
       <div id="hormuz-hero-chart" style="height:280px;"></div>
     </div>
@@ -1040,8 +1040,8 @@
   <!-- Section 5: Upstream Supply Chain -->
   <div class="card">
     <div class="section-header">
-      <span class="section-title tip" data-tip="Sentinel-1 SAR detects vessels regardless of AIS transponder status. Counts are normalised for satellite coverage area differences between passes. Pre-war baseline = average of Feb 23 + Feb 25 observations.">Upstream Supply Chain — Hormuz</span>
-      <span class="section-meta">Sentinel-1 SAR vessel detection &bull; coverage-normalised counts</span>
+      <span class="section-title tip" data-tip="IMF PortWatch reports daily commercial chokepoint crossings. Each bar compares the latest available day with the source-matched 15 January–27 February baseline.">Commercial Chokepoint Throughput</span>
+      <span class="section-meta" id="fuel-maritime-meta">IMF PortWatch daily crossings vs. source-matched pre-war baseline</span>
     </div>
     <div id="fuel-hormuz-chart" style="height:260px;"></div>
   </div>
@@ -1200,8 +1200,6 @@ setText('topbar-date', todayStr());
 // ── event annotations (shared across hero charts) ────────────────────────────
 var EVENT_ANNOTATIONS = [
   { date: '2026-02-28', label: 'War begins', color: '#c0392b' },
-  { date: '2026-03-06', label: 'Major strikes', color: '#e53e3e' },
-  { date: '2026-03-07', label: 'Grid collapse', color: '#ed8936' },
 ];
 
 var NZ_CITIES = ['Auckland', 'Queenstown'];
@@ -1211,8 +1209,18 @@ function isGulfCity(name) {
   return NZ_CITIES.indexOf(name) === -1 && CONTROL_CITIES.indexOf(name) === -1;
 }
 
-function makeEventShapes() {
-  return EVENT_ANNOTATIONS.map(function (evt) {
+function eventsWithinDates(dates) {
+  var usable = (dates || []).filter(Boolean).sort();
+  if (!usable.length) return [];
+  var first = usable[0];
+  var last = usable[usable.length - 1];
+  return EVENT_ANNOTATIONS.filter(function (evt) {
+    return evt.date >= first && evt.date <= last;
+  });
+}
+
+function makeEventShapes(dates) {
+  return eventsWithinDates(dates).map(function (evt) {
     return {
       type: 'line', xref: 'x', x0: evt.date, x1: evt.date,
       yref: 'paper', y0: 0, y1: 1,
@@ -1221,8 +1229,8 @@ function makeEventShapes() {
   });
 }
 
-function makeEventAnnotations() {
-  return EVENT_ANNOTATIONS.map(function (evt) {
+function makeEventAnnotations(dates) {
+  return eventsWithinDates(dates).map(function (evt) {
     return {
       x: evt.date, y: 1, xref: 'x', yref: 'paper',
       text: evt.label, showarrow: false,
@@ -1240,11 +1248,13 @@ var CITY_COLORS = {
 // ── nightlight hero chart (all Gulf cities overlaid) ─────────────────────────
 function renderNightlightHero(nlAllData) {
   var traces = [];
+  var chartDates = [];
   var gulfCities = Object.keys(nlAllData).filter(isGulfCity).sort();
 
   gulfCities.forEach(function (city) {
     var series = nlAllData[city];
     if (!series || !series.length) return;
+    series.forEach(function (d) { chartDates.push(d.date); });
     traces.push({
       x: series.map(function (d) { return d.date; }),
       y: series.map(function (d) { return d.pct_change; }),
@@ -1279,7 +1289,7 @@ function renderNightlightHero(nlAllData) {
     setText('nl-hero-freshness', 'Latest: ' + latestDate + ' (' + days + 'd ago) \u00b7 vs. pre-war baseline');
   }
 
-  var shapes = makeEventShapes();
+  var shapes = makeEventShapes(chartDates);
   shapes.push({
     type: 'line', xref: 'paper', x0: 0, x1: 1,
     yref: 'y', y0: 0, y1: 0,
@@ -1297,7 +1307,7 @@ function renderNightlightHero(nlAllData) {
       titlefont: { size: 10 }, zeroline: false,
     },
     shapes: shapes,
-    annotations: makeEventAnnotations(),
+    annotations: makeEventAnnotations(chartDates),
   }, { responsive: true, displayModeBar: false });
 }
 
@@ -1340,14 +1350,16 @@ function renderFireHero(fireData) {
     legend: { orientation: 'h', x: 0, y: 1.15, font: { size: 9 } },
     xaxis: { showgrid: false, tickfont: { size: 10 } },
     yaxis: { title: 'Fire Count', showgrid: true, gridcolor: '#edf2f7', titlefont: { size: 10 } },
-    shapes: makeEventShapes(),
-    annotations: makeEventAnnotations(),
+    shapes: makeEventShapes(dates),
+    annotations: makeEventAnnotations(dates),
   }, { responsive: true, displayModeBar: false });
 }
 
-// ── Hormuz vessel hero chart ─────────────────────────────────────────────────
+// ── Hormuz SAR-density hero chart ────────────────────────────────────────────
 function renderHormuzHero(sarData) {
-  var hormuz = sarData['Strait of Hormuz'];
+  var hormuz = (sarData['Strait of Hormuz'] || []).filter(function (row) {
+    return row.normalised_count != null && row.scene_coverage >= 0.5;
+  });
   if (!hormuz || !hormuz.length) {
     setText('hormuz-hero-chart', 'No Hormuz SAR data available.');
     return;
@@ -1355,62 +1367,43 @@ function renderHormuzHero(sarData) {
 
   var dates = hormuz.map(function (d) { return d.date; });
   var counts = hormuz.map(function (d) { return d.normalised_count; });
-  var baseline = hormuz[0].baseline_count;
+  var baselineRow = hormuz.find(function (row) { return row.baseline_count != null; });
+  var baseline = baselineRow ? baselineRow.baseline_count : null;
 
   // Freshness
   var latest = dates[dates.length - 1];
   var days = Math.round((Date.now() - new Date(latest).getTime()) / 86400000);
-  setText('hormuz-freshness', 'Latest: ' + latest + ' (' + days + 'd ago) \u00b7 SAR normalised');
+  setText('hormuz-freshness', 'Latest: ' + latest + ' (' + days + 'd ago) \u00b7 SAR density, not commercial transit');
 
-  var shapes = [{
-    type: 'line', xref: 'paper', x0: 0, x1: 1,
-    yref: 'y', y0: baseline, y1: baseline,
-    line: { color: '#718096', width: 1, dash: 'dot' },
-  }];
-
-  var annotations = [{
-    x: 0, xref: 'paper', y: baseline, yref: 'y',
-    text: 'Pre-war baseline (' + baseline + ')', showarrow: false,
-    font: { size: 9, color: '#718096' }, xanchor: 'left',
-  }];
-
-  // Find peak and trough
-  var maxVal = -Infinity, maxIdx = 0, minVal = Infinity, minIdx = 0;
-  counts.forEach(function (v, i) {
-    if (v != null && v > maxVal) { maxVal = v; maxIdx = i; }
-    if (v != null && v < minVal) { minVal = v; minIdx = i; }
-  });
-
-  if (maxVal > baseline * 1.5) {
-    var pct = ((maxVal - baseline) / baseline * 100).toFixed(0);
-    annotations.push({
-      x: dates[maxIdx], y: maxVal, text: '+' + pct + '%',
-      showarrow: true, arrowhead: 0, ax: 0, ay: -25,
-      font: { size: 10, color: '#c0392b' },
+  var shapes = [];
+  var annotations = [];
+  if (baseline != null) {
+    shapes.push({
+      type: 'line', xref: 'paper', x0: 0, x1: 1,
+      yref: 'y', y0: baseline, y1: baseline,
+      line: { color: '#718096', width: 1, dash: 'dot' },
     });
-  }
-  if (minVal < baseline * 0.7) {
-    var pctMin = ((minVal - baseline) / baseline * 100).toFixed(0);
     annotations.push({
-      x: dates[minIdx], y: minVal, text: pctMin + '%',
-      showarrow: true, arrowhead: 0, ax: 0, ay: 25,
-      font: { size: 10, color: '#c0392b' },
+      x: 0, xref: 'paper', y: baseline, yref: 'y',
+      text: 'SAR baseline (' + Math.round(baseline) + ')', showarrow: false,
+      font: { size: 9, color: '#718096' }, xanchor: 'left',
     });
   }
 
   Plotly.newPlot('hormuz-hero-chart', [{
     x: dates, y: counts, type: 'scatter', mode: 'lines+markers',
-    name: 'Normalised vessel count',
+    name: 'Coverage-normalised detections',
     line: { color: '#2b6cb0', width: 2.5 },
     marker: { size: 6, color: '#2b6cb0' },
-    hovertemplate: '%{x}<br>%{y:.0f} vessels<extra></extra>',
+    customdata: hormuz.map(function (d) { return [d.pct_change, d.scene_coverage]; }),
+    hovertemplate: '%{x}<br>%{y:.0f} normalised detections<br>%{customdata[0]:.1f}% vs SAR baseline<br>Scene coverage %{customdata[1]:.0%}<extra></extra>',
   }], {
     margin: { t: 10, r: 20, b: 40, l: 50 },
     font: { family: 'Inter, system-ui, sans-serif', size: 11, color: '#4a5568' },
     paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
     showlegend: false,
     xaxis: { showgrid: false, tickfont: { size: 10 } },
-    yaxis: { title: 'Vessels', showgrid: true, gridcolor: '#edf2f7', titlefont: { size: 10 } },
+    yaxis: { title: 'Coverage-normalised detections', showgrid: true, gridcolor: '#edf2f7', titlefont: { size: 10 }, rangemode: 'tozero' },
     shapes: shapes,
     annotations: annotations,
   }, { responsive: true, displayModeBar: false });
@@ -1613,7 +1606,9 @@ function renderVegetationData(data) {
   setText('vegetation-freshness', latestDate ? 'Latest: ' + latestDate + ' \u2022 cloud fraction shown per region' : 'HLS/Sentinel-derived NDVI');
 
   function draw(regionName) {
-    var series = regions[regionName] || [];
+    var series = (regions[regionName] || []).filter(function (row) {
+      return row.confidence === 'moderate' || row.confidence === 'low';
+    });
     if (!series.length) {
       setEmptyState('vegetation-chart', 'No NDVI time series for this region.');
       return;
@@ -1630,14 +1625,14 @@ function renderVegetationData(data) {
         x: series.map(function (row) { return row.date; }),
         y: series.map(function (row) { return row.mean_ndvi; }),
         customdata: series.map(function (row) {
-          return [row.pct_change, row.cloud_fraction, row.confidence, row.baseline_ndvi];
+          return [row.pct_change == null ? 'withheld' : row.pct_change.toFixed(1) + '%', row.cloud_fraction, row.confidence, row.baseline_ndvi];
         }),
         type: 'scatter',
-        mode: series.length >= 8 ? 'lines+markers' : 'markers',
+        mode: series.length >= 4 ? 'lines+markers' : 'markers',
         name: 'Mean NDVI',
         line: { color: '#276749', width: 2 },
         marker: { size: 8, color: colors },
-        hovertemplate: '<b>%{x}</b><br>NDVI: %{y:.3f}<br>vs baseline: %{customdata[0]:.1f}%<br>Cloud: %{customdata[1]:.0%}<br>Confidence: %{customdata[2]}<extra></extra>',
+        hovertemplate: '<b>%{x}</b><br>NDVI: %{y:.3f}<br>vs baseline: %{customdata[0]}<br>Cloud: %{customdata[1]:.0%}<br>Confidence: %{customdata[2]}<extra></extra>',
       },
       {
         x: series.filter(function (row) { return row.baseline_ndvi != null; }).map(function (row) { return row.date; }),
@@ -1660,10 +1655,13 @@ function renderVegetationData(data) {
     }, { responsive: true, displayModeBar: false });
   }
 
-  var preferred = names.find(function (name) {
+  var preferredCandidates = names.filter(function (name) {
     var row = latest[name];
-    return row && row.pct_change != null && row.confidence === 'moderate';
-  }) || names[0];
+    return row && row.confidence === 'moderate' && row.cloud_fraction != null;
+  }).sort(function (a, b) {
+    return latest[a].cloud_fraction - latest[b].cloud_fraction;
+  });
+  var preferred = preferredCandidates[0] || names[0];
   select.value = preferred;
   draw(preferred);
   select.addEventListener('change', function () { draw(this.value); });
@@ -2001,7 +1999,17 @@ function initInetSelect(countries) {
     opt.value = c; opt.textContent = c; sel.appendChild(opt);
   });
   sel.addEventListener('change', function () { renderInternetChart(this.value); });
-  if (countries.length) { sel.value = countries[0]; renderInternetChart(countries[0]); }
+  var comparable = countries.filter(function (country) {
+    var rows = inetData[country] || [];
+    var latest = rows[rows.length - 1] || {};
+    return latest.observation_state !== 'unknown' && latest.pct_change != null;
+  }).sort(function (a, b) {
+    var aRows = inetData[a];
+    var bRows = inetData[b];
+    return aRows[aRows.length - 1].pct_change - bRows[bRows.length - 1].pct_change;
+  });
+  var preferred = comparable[0] || countries[0];
+  if (preferred) { sel.value = preferred; renderInternetChart(preferred); }
 }
 
 // ── infrastructure status table ──────────────────────────────────────────────
@@ -2109,14 +2117,14 @@ function renderFlightData(data) {
       { x: dates, y: departures, name: 'Departures', type: 'bar', marker: { color: '#48bb78' } },
     ], {
       barmode: 'group',
-      margin: { t: 30, r: 20, b: 40, l: 50 },
+      margin: { t: 30, r: 20, b: 64, l: 50 },
       paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
       font: { family: 'Inter, sans-serif', size: 12, color: '#1a202c' },
-      xaxis: { title: '', gridcolor: '#e2e8f0' },
+      xaxis: { title: 'Observed dates only', type: 'category', gridcolor: '#e2e8f0', tickangle: -30, automargin: true },
       yaxis: { title: 'Movements', gridcolor: '#e2e8f0' },
       legend: { orientation: 'h', y: 1.12 },
-      shapes: [{ type: 'line', x0: '2026-02-28', x1: '2026-02-28', y0: 0, y1: 1, yref: 'paper', line: { color: '#c0392b', width: 2, dash: 'dash' } }],
-      annotations: [{ x: '2026-02-28', y: 1, yref: 'paper', text: 'War start', showarrow: false, font: { size: 10, color: '#c0392b' }, yanchor: 'bottom' }],
+      shapes: makeEventShapes(dates),
+      annotations: makeEventAnnotations(dates),
     }, { responsive: true, displayModeBar: false });
   }
 
@@ -2499,27 +2507,30 @@ function renderNZNightlightChart(cityName) {
   var dates = series.map(function (d) { return d.date; });
   var radiance = series.map(function (d) { return d.radiance; });
   var pct = series.map(function (d) { return d.pct_change; });
-
-  var colors = pct.map(function (v) {
-    return v == null ? '#a0aec0' : v > 20 ? '#0d9488' : v > 0 ? '#38a169' : v > -20 ? '#ed8936' : '#c0392b';
-  });
-
-  Plotly.newPlot('nz-pressure-chart', [
+  var hasComparison = pct.some(function (v) { return v != null; });
+  var traces = [
     { x: dates, y: radiance, type: 'scatter', mode: 'lines+markers', name: 'Radiance',
       line: { color: '#0d9488', width: 2 }, marker: { size: 4 }, yaxis: 'y1',
       hovertemplate: '%{x}<br>%{y:.4f} nW/cm\u00b2/sr<extra></extra>' },
-    { x: dates, y: pct, type: 'bar', name: '% vs baseline',
-      marker: { color: colors, opacity: 0.6 }, yaxis: 'y2',
-      hovertemplate: '%{x}<br>%{y:.1f}%<extra></extra>' },
-  ], {
-    margin: { t: 10, r: 60, b: 40, l: 60 },
+  ];
+  if (hasComparison) {
+    traces.push({ x: dates, y: pct, type: 'bar', name: '% vs baseline',
+      marker: { color: '#718096', opacity: 0.45 }, yaxis: 'y2',
+      hovertemplate: '%{x}<br>%{y:.1f}%<extra></extra>' });
+  }
+
+  var layout = {
+    margin: { t: 10, r: hasComparison ? 60 : 20, b: 46, l: 60 },
     font: { family: 'Inter, system-ui, sans-serif', size: 11, color: '#4a5568' },
     paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
     legend: { x: 0, y: 1.1, orientation: 'h', font: { size: 10 } },
-    xaxis: { showgrid: false, tickfont: { size: 10 } },
+    xaxis: { showgrid: false, tickfont: { size: 10 }, type: 'category', tickangle: -30 },
     yaxis: { title: 'Radiance (nW/cm\u00b2/sr)', showgrid: true, gridcolor: '#edf2f7', titlefont: { size: 10 }, automargin: true },
-    yaxis2: { title: '% Change', overlaying: 'y', side: 'right', showgrid: false, titlefont: { size: 10 }, automargin: true },
-  }, { responsive: true, displayModeBar: false });
+  };
+  if (hasComparison) {
+    layout.yaxis2 = { title: '% Change', overlaying: 'y', side: 'right', showgrid: false, titlefont: { size: 10 }, automargin: true };
+  }
+  Plotly.newPlot('nz-pressure-chart', traces, layout, { responsive: true, displayModeBar: false });
 }
 
 function initNZCitySelect(cities) {
@@ -2550,9 +2561,10 @@ function loadFuelData() {
   }
 });
 
-// Also load SAR data for the Hormuz mini-chart on fuel tab
-load(DATA + '/sar.json').then(function (sar) {
-  renderFuelHormuzChart(sar);
+// Commercial throughput belongs on the fuel-security surface; SAR density is
+// shown separately on the Gulf monitoring surface.
+load(DATA + '/maritime.json').then(function (maritime) {
+  renderFuelMaritimeChart(maritime);
 }).catch(function () {});
 }
 
@@ -2993,32 +3005,32 @@ function renderRetailBasketHistory(referenceBasket) {
   if (full.length) {
     traces.push({
       x: full.map(function (row) { return row.date; }),
-      y: full.map(function (row) { return row.basket_total_nzd; }),
+      y: full.map(function (row) { return row.basket_pct_change; }),
       customdata: full.map(function (row) {
-        return [row.basket_pct_change, row.matched_count, row.low_stock_count];
+        return [row.basket_total_nzd, row.matched_count, row.low_stock_count];
       }),
       name: 'Full named basket',
       type: 'scatter',
       mode: 'lines+markers',
       line: { color: '#2b6cb0', width: 2 },
       marker: { size: 6 },
-      hovertemplate: '<b>Full named basket</b><br>$%{y:.2f}<br>%{x}<br>Change: %{customdata[0]:.1f}%<br>Matched: %{customdata[1]} items<br>Low stock: %{customdata[2]}<extra></extra>',
+      hovertemplate: '<b>Full named basket</b><br>%{x}<br>Change: %{y:.1f}%<br>Total: $%{customdata[0]:.2f}<br>Matched: %{customdata[1]} items<br>Low stock: %{customdata[2]}<extra></extra>',
     });
   }
 
   if (staples.length) {
     traces.push({
       x: staples.map(function (row) { return row.date; }),
-      y: staples.map(function (row) { return row.staples_total_nzd; }),
+      y: staples.map(function (row) { return row.staples_pct_change; }),
       customdata: staples.map(function (row) {
-        return [row.staples_pct_change, row.staples_count];
+        return [row.staples_total_nzd, row.staples_count];
       }),
       name: 'Food staples subset',
       type: 'scatter',
       mode: 'lines+markers',
       line: { color: '#276749', width: 2 },
       marker: { size: 6 },
-      hovertemplate: '<b>Food staples subset</b><br>$%{y:.2f}<br>%{x}<br>Change: %{customdata[0]:.1f}%<br>Items: %{customdata[1]}<extra></extra>',
+      hovertemplate: '<b>Food staples subset</b><br>%{x}<br>Change: %{y:.1f}%<br>Total: $%{customdata[0]:.2f}<br>Items: %{customdata[1]}<extra></extra>',
     });
   }
 
@@ -3034,11 +3046,12 @@ function renderRetailBasketHistory(referenceBasket) {
     font: { family: 'Inter, sans-serif', size: 11 },
     xaxis: { title: '', gridcolor: '#edf2f7', tickfont: { size: 10 } },
     yaxis: {
-      title: 'NZD',
+      title: '% change from 7 Apr basket',
       gridcolor: '#edf2f7',
-      tickprefix: '$',
+      ticksuffix: '%',
       tickfont: { size: 10 },
-      rangemode: 'tozero',
+      zeroline: true,
+      zerolinecolor: '#718096',
     },
     legend: { orientation: 'h', y: 1.12, x: 0, font: { size: 10 } },
     hovermode: 'x unified',
@@ -3210,43 +3223,40 @@ function renderScenarioProjections(fuel) {
   }
 }
 
-function renderFuelHormuzChart(sar) {
-  var hormuz = sar['Strait of Hormuz'] || sar['Hormuz'];
-  if (!hormuz || !hormuz.length) return;
-
-  var dates = hormuz.map(function (d) { return d.date; });
-  var counts = hormuz.map(function (d) { return d.normalised_count || d.vessel_count; });
-  var baseline = hormuz[0].baseline_count;
-
-  var pctChanges = hormuz.map(function (d) { return d.pct_change; });
-  var traces = [{
-    x: dates, y: counts, name: 'Vessel count (coverage-normalised)', type: 'scatter',
-    mode: 'lines+markers', line: { color: '#3182ce', width: 2 }, marker: { size: 5 },
-    customdata: pctChanges,
-    hovertemplate: '<b>%{x}</b><br>Vessels: %{y:.0f}<br>vs baseline: %{customdata:.1f}%<extra></extra>',
-  }];
-  if (baseline) {
-    traces.push({
-      x: [dates[0], dates[dates.length - 1]], y: [baseline, baseline],
-      name: 'Pre-war baseline (' + Math.round(baseline) + ')', type: 'scatter', mode: 'lines',
-      line: { color: '#a0aec0', width: 1, dash: 'dash' },
-      hovertemplate: 'Baseline: %{y:.0f} vessels<extra></extra>',
-    });
+function renderFuelMaritimeChart(maritime) {
+  var rows = Object.keys((maritime || {}).chokepoints || {}).map(function (key) {
+    var point = maritime.chokepoints[key];
+    var t = point.throughput || {};
+    return {
+      name: point.name,
+      date: t.date,
+      crossings: t.crossings,
+      baseline: t.baseline,
+      pct: t.pct_change,
+      source: t.source,
+    };
+  }).filter(function (row) { return row.pct != null; }).sort(function (a, b) {
+    return a.pct - b.pct;
+  });
+  if (!rows.length) {
+    setEmptyState('fuel-hormuz-chart', 'No source-matched commercial transit comparisons available.');
+    return;
   }
 
-  Plotly.newPlot('fuel-hormuz-chart', traces, {
-    margin: { t: 10, r: 20, b: 40, l: 50 },
-    xaxis: { title: '', gridcolor: '#edf2f7' },
-    yaxis: { title: 'Vessels (coverage-normalised)', gridcolor: '#edf2f7' },
-    legend: { orientation: 'h', y: 1.08 },
-    shapes: [{
-      type: 'line', x0: '2026-02-28', x1: '2026-02-28', y0: 0, y1: 1, yref: 'paper',
-      line: { color: '#c0392b', width: 1.5, dash: 'dash' },
-    }],
-    annotations: [{
-      x: '2026-02-28', y: 1, yref: 'paper', text: 'War begins', showarrow: false,
-      font: { size: 10, color: '#c0392b' }, yanchor: 'bottom',
-    }],
+  var latest = rows.map(function (row) { return row.date; }).sort().pop();
+  setText('fuel-maritime-meta', 'IMF PortWatch daily crossings \u2022 latest ' + latest + ' \u2022 source-matched baselines');
+  Plotly.newPlot('fuel-hormuz-chart', [{
+    x: rows.map(function (row) { return row.pct; }),
+    y: rows.map(function (row) { return row.name; }),
+    customdata: rows.map(function (row) { return [row.crossings, row.baseline, row.date, row.source]; }),
+    type: 'bar', orientation: 'h',
+    marker: { color: rows.map(function (row) { return row.pct < 0 ? '#c05621' : '#2b6cb0'; }) },
+    hovertemplate: '<b>%{y}</b><br>%{customdata[2]}: %{customdata[0]:.0f} crossings<br>Baseline: %{customdata[1]:.1f}<br>Change: %{x:.1f}%<extra></extra>',
+  }], {
+    margin: { t: 10, r: 24, b: 48, l: 130 },
+    xaxis: { title: '% change from source-matched baseline', gridcolor: '#edf2f7', zeroline: true, zerolinecolor: '#718096', zerolinewidth: 1 },
+    yaxis: { automargin: true },
+    showlegend: false,
     paper_bgcolor: 'transparent', plot_bgcolor: 'transparent', font: { family: 'Inter, sans-serif', size: 11, color: '#4a5568' },
   }, { responsive: true, displayModeBar: false });
 }
@@ -3366,7 +3376,6 @@ function renderUpstreamIndicators(fuel) {
       name: 'NZD per USD',
       type: 'scatter', mode: 'lines',
       line: { color: '#0d9488', width: 2 },
-      fill: 'tozeroy', fillcolor: 'rgba(13,148,136,0.08)',
       hovertemplate: '<b>NZD per USD</b> %{y:.4f}<extra></extra>',
     }];
     if (baselines.nzdusd) {
@@ -3380,7 +3389,7 @@ function renderUpstreamIndicators(fuel) {
     }
     var fxLayout = Object.assign({}, commonLayout, {
       xaxis: { gridcolor: '#edf2f7' },
-      yaxis: { title: 'NZD per USD', gridcolor: '#edf2f7', autorange: true },
+      yaxis: { title: 'NZD per USD', gridcolor: '#edf2f7', autorange: true, tickformat: '.2f' },
       legend: { orientation: 'h', y: 1.15, font: { size: 10 } },
     });
     Plotly.newPlot('upstream-fx-chart', fxTraces, fxLayout, { responsive: true, displayModeBar: false });
