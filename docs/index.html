@@ -724,6 +724,55 @@
     </div>
   </div>
 
+  <!-- Layered analytical lenses -->
+  <div class="card" id="analytical-lenses">
+    <div class="section-header">
+      <span class="section-title">Shock → Buffer → Service → Welfare</span>
+      <span class="section-meta">Layered evidence; missing inputs widen the displayed range</span>
+    </div>
+    <p style="font-size:12px;line-height:1.6;color:#4a5568;margin:0 0 14px;">
+      This separates the initiating shock from resilience buffers, service degradation, and human effects.
+      Correlated feeds share one evidence-family weight. A score is withheld below the coverage gate.
+    </p>
+    <div class="table-wrap">
+      <table>
+        <caption class="sr-only">Layered causal stress assessment</caption>
+        <thead><tr>
+          <th scope="col">System / place</th><th scope="col">Shock</th><th scope="col">Buffer</th>
+          <th scope="col">Service</th><th scope="col">Welfare</th><th scope="col">Overall range</th>
+          <th scope="col">Coverage</th>
+        </tr></thead>
+        <tbody id="causal-tbody"><tr><td colspan="7" class="empty-state">Loading&hellip;</td></tr></tbody>
+      </table>
+    </div>
+    <div class="section-header" style="margin-top:20px">
+      <span class="section-title" style="font-size:10px">Expected vs observed</span>
+      <span class="section-meta">Strongest available transparent counterfactual</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <caption class="sr-only">Latest counterfactual estimates</caption>
+        <thead><tr><th scope="col">Signal</th><th scope="col">Entity</th><th scope="col">Date</th>
+          <th scope="col" style="text-align:right">Observed</th><th scope="col" style="text-align:right">Expected</th>
+          <th scope="col" style="text-align:right">Deviation</th><th scope="col">Method</th></tr></thead>
+        <tbody id="counterfactual-tbody"><tr><td colspan="7" class="empty-state">Loading&hellip;</td></tr></tbody>
+      </table>
+    </div>
+    <div class="section-header" style="margin-top:20px">
+      <span class="section-title" style="font-size:10px">New Zealand import exposure</span>
+      <span class="section-meta">Stats NZ HS10 partner data with route-scenario bands—not observed cargo routes</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <caption class="sr-only">New Zealand import exposure scenarios</caption>
+        <thead><tr><th scope="col">Category</th><th scope="col">Period</th>
+          <th scope="col" style="text-align:right">Imports</th><th scope="col" style="text-align:right">Exposure low–high</th>
+          <th scope="col" style="text-align:right">Top 3 suppliers</th></tr></thead>
+        <tbody id="trade-exposure-tbody"><tr><td colspan="5" class="empty-state">Loading&hellip;</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
   <!-- Methodology & Sources -->
   <div class="card" id="methodology">
     <details>
@@ -739,16 +788,20 @@
           <tr><td>VIIRS DNB L1B swaths</td><td>Daily (~3h lag)</td><td>750m</td><td>Free</td></tr>
           <tr><td>Sentinel-1 SAR</td><td>6-day revisit</td><td>10m</td><td>Free</td></tr>
           <tr><td>NASA HLS / Sentinel-2 NDVI</td><td>5-day revisit</td><td>10&ndash;30m</td><td>Free</td></tr>
-          <tr><td>IODA / Cloudflare</td><td>Daily</td><td>Country</td><td>Free</td></tr>
+          <tr><td>IODA / RIPE Atlas / Cloudflare Radar</td><td>Daily</td><td>Country / host sample</td><td>Free; Radar token</td></tr>
           <tr><td>OpenSky ADS-B</td><td>Daily</td><td>Airport</td><td>Free (rate-limited)</td></tr>
           <tr><td>GDELT</td><td>Daily</td><td>Country</td><td>Free (rate-limited)</td></tr>
+          <tr><td>JODI Oil World Database</td><td>Monthly</td><td>Country / product / flow</td><td>Free</td></tr>
+          <tr><td>Stats NZ overseas merchandise trade</td><td>Monthly</td><td>HS10 / partner country</td><td>Free</td></tr>
         </table>
 
         <h4 style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--navy);margin:16px 0 6px;">Methodology Notes</h4>
         <ul style="padding-left:18px;">
           <li><strong>Baseline period:</strong> 15 Jan &ndash; 27 Feb 2026 (pre-war)</li>
           <li><strong>% change:</strong> (current &minus; baseline) / baseline &times; 100</li>
-          <li><strong>Compound risk:</strong> Weighted composite of 8 normalised factors &mdash; NL 20%, Fire 15%, Trade 15%, NO&#8322; 12%, Internet 12%, Flights 10%, GDELT 8%, Thermal 8%</li>
+          <li><strong>Primary analytical lens:</strong> shock &rarr; buffer &rarr; service &rarr; welfare. Missing evidence lowers coverage and widens the reported bounds; it is not treated as zero stress.</li>
+          <li><strong>Counterfactual order:</strong> same-season prior years, then a date-matched control, then a robust pre-event median. The selected method and sample count travel with every estimate.</li>
+          <li><strong>Legacy compound index:</strong> retained for continuity while the layered model is validated; correlated inputs should be interpreted through the new evidence-family grouping.</li>
           <li><strong>DNB L1B caveat:</strong> No lunar illumination or straylight correction &mdash; absolute values less reliable than relative day-to-day trends</li>
           <li><strong>Nightlight quality:</strong> VNP46A2 Mandatory Quality Flag 0 pixels only; cloud-affected or thin observations are marked partial.</li>
           <li><strong>Ramadan caveat:</strong> The 15 Jan–27 Feb baseline includes Ramadan from mid-February. Future baselines should stratify pre-Ramadan and Ramadan behavior.</li>
@@ -768,6 +821,7 @@
           <a href="data/sar.json">SAR vessels</a> &middot;
           <a href="data/vegetation.json">vegetation / NDVI</a> &middot;
           <a href="data/fuel_security.json">fuel security</a>
+          &middot; <a href="data/analytical_lenses.json">analytical lenses</a>
         </p>
 
         <h4 style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--navy);margin:16px 0 6px;">Citation</h4>
@@ -1543,6 +1597,81 @@ function renderRisk(riskData) {
   }
 }
 
+function renderAnalyticalLenses(data) {
+  data = data || {};
+  var causalBody = document.getElementById('causal-tbody');
+  var counterBody = document.getElementById('counterfactual-tbody');
+  var tradeBody = document.getElementById('trade-exposure-tbody');
+  function score(value) { return value == null ? '\u2014' : Number(value).toFixed(2); }
+  function percent(value, digits) {
+    return value == null ? '\u2014' : (Number(value) * 100).toFixed(digits == null ? 0 : digits) + '%';
+  }
+
+  if (causalBody) {
+    causalBody.textContent = '';
+    var layers = (data.causal_layers || []).slice().sort(function (a, b) {
+      if (a.entity_type !== b.entity_type) return a.entity_type === 'system' ? -1 : 1;
+      return a.entity_name.localeCompare(b.entity_name);
+    });
+    layers.forEach(function (row) {
+      var tr = el('tr');
+      tr.appendChild(el('td', null, row.entity_name));
+      tr.appendChild(el('td', { class: 'mono' }, score(row.shock_score)));
+      tr.appendChild(el('td', { class: 'mono' }, score(row.buffer_stress_score)));
+      tr.appendChild(el('td', { class: 'mono' }, score(row.service_stress_score)));
+      tr.appendChild(el('td', { class: 'mono' }, score(row.welfare_stress_score)));
+      var range = '[' + score(row.stress_lower) + ', ' + score(row.stress_upper) + ']';
+      if (row.is_publishable) range = score(row.overall_stress) + ' ' + range;
+      else range = 'withheld ' + range;
+      tr.appendChild(el('td', { class: 'mono' }, range));
+      tr.appendChild(el('td', { class: 'mono' }, percent(row.coverage_score)));
+      causalBody.appendChild(tr);
+    });
+    if (!layers.length) {
+      causalBody.appendChild(el('tr')).appendChild(el('td', { colspan: '7', class: 'empty-state' }, 'No layered estimates exported yet.'));
+    }
+  }
+
+  if (counterBody) {
+    counterBody.textContent = '';
+    var estimates = (data.counterfactuals || []).slice().sort(function (a, b) {
+      return Math.abs(b.pct_deviation || 0) - Math.abs(a.pct_deviation || 0);
+    }).slice(0, 15);
+    estimates.forEach(function (row) {
+      var tr = el('tr');
+      tr.appendChild(el('td', null, row.indicator_key.replace(/\./g, ' ')));
+      tr.appendChild(el('td', null, row.entity_name));
+      tr.appendChild(el('td', { class: 'mono' }, row.date));
+      tr.appendChild(el('td', { class: 'mono', style: 'text-align:right' }, Number(row.observed_value).toFixed(3)));
+      tr.appendChild(el('td', { class: 'mono', style: 'text-align:right' }, Number(row.expected_value).toFixed(3)));
+      var deviation = row.pct_deviation == null ? '\u2014' : (row.pct_deviation > 0 ? '+' : '') + Number(row.pct_deviation).toFixed(1) + '%';
+      tr.appendChild(el('td', { class: 'mono', style: 'text-align:right' }, deviation));
+      tr.appendChild(el('td', null, row.method.replace(/_/g, ' ') + ' (n=' + row.baseline_observation_count + ')'));
+      counterBody.appendChild(tr);
+    });
+    if (!estimates.length) {
+      counterBody.appendChild(el('tr')).appendChild(el('td', { colspan: '7', class: 'empty-state' }, 'No counterfactual estimates exported yet.'));
+    }
+  }
+
+  if (tradeBody) {
+    tradeBody.textContent = '';
+    var exposures = data.nz_trade_exposure || [];
+    exposures.forEach(function (row) {
+      var tr = el('tr');
+      tr.appendChild(el('td', null, row.description));
+      tr.appendChild(el('td', { class: 'mono' }, String(row.period).slice(0, 7)));
+      tr.appendChild(el('td', { class: 'mono', style: 'text-align:right' }, '$' + (row.total_import_nzd / 1000000).toFixed(1) + 'm'));
+      tr.appendChild(el('td', { class: 'mono', style: 'text-align:right' }, percent(row.exposure_share_low) + '\u2013' + percent(row.exposure_share_high)));
+      tr.appendChild(el('td', { class: 'mono', style: 'text-align:right' }, percent(row.top_three_supplier_share)));
+      tradeBody.appendChild(tr);
+    });
+    if (!exposures.length) {
+      tradeBody.appendChild(el('tr')).appendChild(el('td', { colspan: '5', class: 'empty-state' }, 'No Stats NZ exposure snapshot exported yet.'));
+    }
+  }
+}
+
 function renderVegetationData(data) {
   var latest = data.latest || {};
   var regions = data.regions || {};
@@ -2169,11 +2298,13 @@ Promise.all([
   loadOptional(DATA + '/flights.json', {}),
   loadOptional(DATA + '/fires.json', {}),
   loadOptional(DATA + '/vegetation.json', { regions: {}, latest: {} }),
+  loadOptional(DATA + '/analytical_lenses.json', {}),
 ]).then(function (results) {
   var nl = results[0] || {}, risk = results[1] || {}, sar = results[2] || {},
       fireGeo = results[3] || { features: [] }, infraFires = results[4] || [], meta = results[5] || {},
       inet = results[6] || {}, thermalSigs = results[7] || {}, flightData = results[8] || {},
-      fireTimeSeries = results[9] || {}, vegetation = results[10] || { regions: {}, latest: {} };
+      fireTimeSeries = results[9] || {}, vegetation = results[10] || { regions: {}, latest: {} },
+      analyticalLenses = results[11] || {};
 
   // Build per-city data structure for chart
   Object.keys(nl).forEach(function (city) {
@@ -2236,6 +2367,7 @@ Promise.all([
   initInetSelect(Object.keys(inet).sort());
   renderInfraTable(thermalSigs);
   renderFlightData(flightData);
+  renderAnalyticalLenses(analyticalLenses);
 
 }).catch(function (err) {
   console.error(err);
