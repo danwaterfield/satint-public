@@ -1,1 +1,1 @@
-[]
+[{"lat":27.0162,"lon":49.5782,"frp":37.6,"confidence":"nominal","satellite":"VIIRS_NOAA21_NRT","detected_at":"2026-08-01T10:21:00+00:00","infrastructure":"Jubail Desal","distance_km":8.0},{"lat":27.0185,"lon":49.579,"frp":37.0,"confidence":"low","satellite":"VIIRS_NOAA21_NRT","detected_at":"2026-08-01T10:21:00+00:00","infrastructure":"Jubail Desal","distance_km":8.0},{"lat":30.5664,"lon":47.3137,"frp":30.3,"confidence":"low","satellite":"VIIRS_SNPP_NRT","detected_at":"2026-08-01T10:58:00+00:00","infrastructure":"Rumaila Oilfield","distance_km":8.2}]

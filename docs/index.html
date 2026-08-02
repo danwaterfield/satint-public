@@ -793,6 +793,7 @@
           <tr><td>GDELT</td><td>Daily</td><td>Country</td><td>Free (rate-limited)</td></tr>
           <tr><td>JODI Oil World Database</td><td>Monthly</td><td>Country / product / flow</td><td>Free</td></tr>
           <tr><td>Stats NZ overseas merchandise trade</td><td>Monthly</td><td>HS10 / partner country</td><td>Free</td></tr>
+          <tr><td>Gas Industry Company NZ</td><td>Daily / monthly history</td><td>Public pipelines / Ahuroa facility</td><td>Free</td></tr>
         </table>
 
         <h4 style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--navy);margin:16px 0 6px;">Methodology Notes</h4>
@@ -820,7 +821,8 @@
           <a href="data/thermal_signatures.json">thermal</a> &middot;
           <a href="data/sar.json">SAR vessels</a> &middot;
           <a href="data/vegetation.json">vegetation / NDVI</a> &middot;
-          <a href="data/fuel_security.json">fuel security</a>
+          <a href="data/fuel_security.json">fuel security</a> &middot;
+          <a href="data/fuel_abm.json">validated fuel ensemble</a>
           &middot; <a href="data/analytical_lenses.json">analytical lenses</a>
         </p>
 
@@ -1091,6 +1093,21 @@
     </div>
   </div>
 
+  <div class="card">
+    <div class="section-header">
+      <span class="section-title tip" data-tip="A domestic energy-buffer context layer from Gas Industry Company workbooks. Production and use are compared with the same calendar dates in the prior year to reduce seasonal distortion. Ahuroa is one gas-storage facility, not a national inventory. These observations do not causally alter the liquid-fuel model.">Domestic Energy Buffer</span>
+      <span class="section-meta"><a href="https://www.gasindustry.co.nz/data/resources/" target="_blank" rel="noopener">Gas Industry Company</a> &bull; seasonal comparison &bull; non-causal context</span>
+    </div>
+    <div class="fuel-cards" id="gas-context-summary">
+      <p class="empty-state" style="grid-column:1/-1">Loading domestic energy context…</p>
+    </div>
+    <div class="upstream-grid">
+      <div id="gas-flow-chart" style="height:310px;"></div>
+      <div id="gas-storage-chart" style="height:310px;"></div>
+    </div>
+    <p id="gas-context-meta" style="font-size:11px;color:var(--slate-lt);line-height:1.5;margin-top:8px;"></p>
+  </div>
+
   <!-- Section 5: Upstream Supply Chain -->
   <div class="card">
     <div class="section-header">
@@ -1152,6 +1169,26 @@
   <div id="scenario-chart" style="height:340px;"></div>
   <div id="scenario-comparison" style="margin-top:12px"></div>
 
+  <!-- Validated agent-based ensemble (quarantined until backcast approval) -->
+  <div class="card" style="margin-top:24px" id="fuel-abm-panel">
+    <div class="section-header">
+      <span class="section-title tip" tabindex="0" data-tip="Representative refiners, importers, shipments, demand sectors, and policy rules interact across seeded simulations. Frequencies are conditional on the selected scenario and parameter ranges—not unconditional forecasts.">Adaptive Fuel Ensemble</span>
+      <span class="section-meta" id="fuel-abm-meta">Checking historical validation state…</span>
+    </div>
+    <div id="fuel-abm-status" class="empty-state">Loading…</div>
+    <div id="fuel-abm-content" style="display:none">
+      <div style="margin-bottom:8px">
+        <select id="fuel-abm-fuel-select" style="font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text)">
+          <option value="diesel">Diesel</option>
+          <option value="petrol">Petrol</option>
+          <option value="jet">Jet Fuel</option>
+        </select>
+      </div>
+      <div id="fuel-abm-chart" style="height:340px"></div>
+      <div id="fuel-abm-comparison" class="table-wrap" style="margin-top:12px"></div>
+    </div>
+  </div>
+
   <!-- Methodology & Assumptions -->
   <div class="fuel-methodology" id="fuel-methodology">
     <strong>Model assumptions &amp; limitations:</strong>
@@ -1168,7 +1205,7 @@
 </main>
 
 <footer class="footer">
-  <span>Data: NASA FIRMS &bull; NASA Black Marble VNP46A2 &bull; VIIRS DNB L1B &bull; Sentinel-1 SAR via ASF DAAC &bull; IODA / Georgia Tech &bull; MBIE NZ Fuel Monitoring &bull; Woolworths NZ public basket &bull; POAL / Port of Tauranga schedules</span>
+  <span>Data: NASA FIRMS &bull; NASA Black Marble VNP46A2 &bull; VIIRS DNB L1B &bull; Sentinel-1 SAR via ASF DAAC &bull; IODA / Georgia Tech &bull; MBIE NZ Fuel Monitoring &bull; Gas Industry Company NZ &bull; Woolworths NZ public basket &bull; POAL / Port of Tauranga schedules</span>
   <span id="footer-right">Baseline period: 15 Jan – 27 Feb 2026</span>
 </footer>
 
@@ -1183,7 +1220,6 @@ document.querySelectorAll('.tip').forEach(function (node) {
   if (!node.hasAttribute('tabindex')) node.setAttribute('tabindex', '0');
   node.setAttribute('role', 'note');
 });
-var NZ_DATA_VERSION = '2026-06-11-nz-quality';
 var nlData = {};   // city → {dates, mean_radiance, pct_change, baseline_radiance}
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -2330,26 +2366,46 @@ Promise.all([
     setText('topbar-ingested', 'Ingested: no v2 run yet');
   }
   var freshness = meta.freshness || {};
+  var retrievalFreshness = meta.retrieval_freshness || {};
   var latestObserved = null;
   var staleParts = [];
+  var sourceLabels = {
+    nightlights: 'quality-controlled nightlights',
+    nightlights_provisional: 'provisional nightlights',
+    fires: 'fires', internet: 'internet', flights: 'flights', sar: 'SAR',
+    vegetation: 'vegetation', thermal: 'thermal', retail: 'retail', ports: 'ports',
+  };
   Object.keys(freshness).forEach(function (source) {
     var latest = freshness[source] && freshness[source].latest;
+    var label = sourceLabels[source] || source.replace(/_/g, ' ');
     if (!latest) {
-      staleParts.push(source + ': unavailable');
+      staleParts.push(label + ': unavailable');
       return;
     }
     if (!latestObserved || latest > latestObserved) latestObserved = latest;
     var age = Math.max(0, Math.floor((Date.now() - new Date(latest + 'T00:00:00Z').getTime()) / 86400000));
-    if (age > 3) staleParts.push(source + ': ' + age + 'd old');
+    if (age > 3) staleParts.push(label + ': ' + age + 'd old');
+  });
+  var retrievalProblems = [];
+  Object.keys(retrievalFreshness).forEach(function (key) {
+    var source = retrievalFreshness[key] || {};
+    var state = source.observation_state || 'unknown';
+    if (source.status === 'failed' || ['auth_failed', 'fetch_failed', 'rate_limited', 'no_coverage'].indexOf(state) !== -1) {
+      var stateLabel = state.replace(/_/g, ' ');
+      retrievalProblems.push((source.name || key.replace(/_/g, ' ')) + ': ' + stateLabel);
+    }
   });
   if (latestObserved) setText('topbar-observed', 'Observed ' + latestObserved);
   if (meta.situation_brief) {
     setText('brief-text', meta.situation_brief);
     setText('brief-date', meta.generated_at ? fmtDate(meta.generated_at) : '');
   }
-  if (staleParts.length) {
+  if (staleParts.length || retrievalProblems.length) {
     var staleBanner = document.getElementById('stale-banner');
-    staleBanner.textContent = 'Data freshness: ' + staleParts.join(' \u00b7 ') + '. Interpret stale or unavailable sources as unknown.';
+    var warnings = [];
+    if (staleParts.length) warnings.push('Freshness: ' + staleParts.join(' \u00b7 '));
+    if (retrievalProblems.length) warnings.push('Source availability: ' + retrievalProblems.join(' \u00b7 '));
+    staleBanner.textContent = warnings.join('. ') + '. Interpret stale or unavailable sources as unknown.';
     staleBanner.style.display = 'block';
   }
 
@@ -2385,7 +2441,7 @@ var nzDataLoaded = false;
 function loadNZData() {
   if (nzDataLoaded) return;
   nzDataLoaded = true;
-  load(DATA + '/nz.json?v=' + NZ_DATA_VERSION).then(function (nz) {
+  load(DATA + '/nz.json').then(function (nz) {
   renderNZAssetTable(nz.asset_counts, 'marina', 'vessel', 'nz-marina-tbody');
   renderNZAssetTable(nz.asset_counts, 'airport', 'aircraft', 'nz-airport-tbody');
   renderNZSarTable(nz.sar);
@@ -2443,7 +2499,10 @@ function renderNZQuality(quality) {
   var rows = [
     ['Marina optical', quality.marina_optical, 'Sentinel-2 rows are mostly clouded; treat marina bright-object counts as experimental until a clearer backfill exists.'],
     ['Airport optical', quality.airport_optical, 'Sentinel-2 apron counts are too sparse for current airport inference; prefer the ADS-B fallback below.'],
-    ['Approach / marina SAR', quality.sar, 'Sentinel-1 detects vessels without cloud, but this export is stale and has too few dates for a live baseline.'],
+    ['Approach / marina SAR', quality.sar,
+      quality.sar && quality.sar.latest_age_days != null && quality.sar.latest_age_days > 14
+        ? 'Sentinel-1 detects vessels without cloud, but the latest scene is stale and no verified source-matched pre-war baseline exists.'
+        : 'Sentinel-1 detects vessels without cloud. Recent coverage is available, but no verified source-matched pre-war baseline exists; treat counts as contextual, not a change estimate.'],
     ['Airport ADS-B', quality.airport_adsb, 'Raw movement counts are retained; percentage comparisons are withheld until a verified, source-matched pre-war baseline exists.'],
   ];
 
@@ -2693,6 +2752,9 @@ function loadFuelData() {
   }
 });
 
+loadOptional(DATA + '/fuel_abm.json', { publication: { state: 'unavailable', is_publishable: false } })
+  .then(renderFuelABM);
+
 // Commercial throughput belongs on the fuel-security surface; SAR density is
 // shown separately on the Gulf monitoring surface.
 load(DATA + '/maritime.json').then(function (maritime) {
@@ -2701,6 +2763,7 @@ load(DATA + '/maritime.json').then(function (maritime) {
 }
 
 function renderFuelSecurity(fuel) {
+  renderDomesticEnergyContext(fuel);
   var ind = fuel.indicator;
   if (!ind) return;
 
@@ -3006,6 +3069,137 @@ function renderFuelSecurity(fuel) {
   }
 
   renderDomesticSupplyChain(fuel);
+}
+
+function renderDomesticEnergyContext(fuel) {
+  var context = fuel.domestic_energy_context || {};
+  var production = context.production_and_use || {};
+  var storage = context.storage || {};
+  var metrics = production.metrics || {};
+  var summaryEl = document.getElementById('gas-context-summary');
+  var metaEl = document.getElementById('gas-context-meta');
+  if (!summaryEl || !metaEl) return;
+  summaryEl.textContent = '';
+
+  var metricOrder = [
+    'public_pipeline_production',
+    'electricity_generation_use',
+    'major_industrial_use',
+  ];
+  var hasFlows = metricOrder.some(function (key) { return !!metrics[key]; });
+  var hasStorage = !!(storage.latest && storage.latest.closing_balance_tj != null);
+  if (!hasFlows && !hasStorage) {
+    summaryEl.appendChild(el('p', { class: 'empty-state', style: 'grid-column:1/-1' }, 'Gas-system context is unavailable in this export.'));
+    setEmptyState('gas-flow-chart', 'No comparable gas production or use observations.');
+    setEmptyState('gas-storage-chart', 'No daily Ahuroa storage observations.');
+    metaEl.textContent = context.model_usage || '';
+    return;
+  }
+
+  metricOrder.forEach(function (key) {
+    var metric = metrics[key];
+    if (!metric) return;
+    var change = metric.same_calendar_yoy_pct_change;
+    var card = el('div', { class: 'fuel-card' });
+    card.appendChild(el('div', { class: 'fuel-card-type' }, metric.label));
+    card.appendChild(el('div', {
+      style: 'font-family:var(--font-mono);font-size:24px;font-weight:600;color:var(--text)',
+    }, change == null ? '—' : (change >= 0 ? '+' : '') + change.toFixed(1) + '%'));
+    card.appendChild(el('div', { style: 'font-size:11px;color:var(--slate-lt);margin-top:4px' },
+      metric.latest_7d_average == null || metric.prior_year_7d_average == null
+        ? 'Same-calendar comparison unavailable'
+        : '7-day avg ' + metric.latest_7d_average.toFixed(1) + ' vs ' + metric.prior_year_7d_average.toFixed(1) + ' in 2025'));
+    card.appendChild(el('div', { style: 'font-size:10px;color:var(--slate-lt);margin-top:6px' }, 'Publisher source units • through ' + metric.latest_period));
+    summaryEl.appendChild(card);
+  });
+
+  if (hasStorage) {
+    var latest = storage.latest;
+    var storageCard = el('div', { class: 'fuel-card' });
+    storageCard.appendChild(el('div', { class: 'fuel-card-type' }, 'Ahuroa above cushion'));
+    storageCard.appendChild(el('div', {
+      style: 'font-family:var(--font-mono);font-size:24px;font-weight:600;color:var(--text)',
+    }, latest.balance_above_cushion_tj == null ? '—' : latest.balance_above_cushion_tj.toFixed(1) + ' TJ'));
+    storageCard.appendChild(el('div', { style: 'font-size:11px;color:var(--slate-lt);margin-top:4px' },
+      'Closing ' + latest.closing_balance_tj.toFixed(1) + ' TJ' +
+      (latest.daily_change_tj == null ? '' : '; daily change ' + (latest.daily_change_tj >= 0 ? '+' : '') + latest.daily_change_tj.toFixed(1) + ' TJ')));
+    storageCard.appendChild(el('div', { style: 'font-size:10px;color:var(--slate-lt);margin-top:6px' }, 'One facility • through ' + latest.date));
+    summaryEl.appendChild(storageCard);
+  }
+
+  var flowColors = {
+    public_pipeline_production: '#2b6cb0',
+    electricity_generation_use: '#d69e2e',
+    major_industrial_use: '#805ad5',
+  };
+  var flowTraces = [];
+  metricOrder.forEach(function (key) {
+    var metric = metrics[key];
+    if (!metric) return;
+    var rows = (metric.series || []).filter(function (row) { return row.prior_year_index != null; });
+    if (!rows.length) return;
+    flowTraces.push({
+      x: rows.map(function (row) { return row.date; }),
+      y: rows.map(function (row) { return row.prior_year_index; }),
+      customdata: rows.map(function (row) { return [row.value, row.prior_year_value, row.prior_year_date]; }),
+      name: metric.label,
+      type: 'scatter',
+      mode: 'lines',
+      line: { color: flowColors[key], width: 2 },
+      hovertemplate: '<b>' + metric.label + '</b><br>%{x}<br>Prior-year index: %{y:.1f}<br>Published value: %{customdata[0]:.1f}<br>2025 comparison: %{customdata[1]:.1f} (%{customdata[2]})<extra></extra>',
+    });
+  });
+  if (flowTraces.length) {
+    Plotly.newPlot('gas-flow-chart', flowTraces, {
+      margin: { l: 48, r: 16, t: 28, b: 42 },
+      title: { text: 'Production and use vs same date in 2025', font: { size: 12 }, x: 0.02 },
+      paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
+      font: { family: 'Inter, sans-serif', size: 10, color: '#4a5568' },
+      xaxis: { gridcolor: '#edf2f7', tickfont: { size: 9 } },
+      yaxis: { title: '2025 = 100', gridcolor: '#edf2f7', fixedrange: true },
+      legend: { orientation: 'h', y: 1.18, font: { size: 9 } },
+      shapes: [{ type: 'line', xref: 'paper', x0: 0, x1: 1, y0: 100, y1: 100, line: { color: '#718096', width: 1, dash: 'dot' } }],
+      hovermode: 'x unified',
+    }, { responsive: true, displayModeBar: false });
+  } else {
+    setEmptyState('gas-flow-chart', 'No same-calendar gas comparisons available.');
+  }
+
+  var storageRows = storage.series || [];
+  if (storageRows.length) {
+    var cushionRows = storageRows.filter(function (row) { return row.cushion_gas_tj != null; });
+    var closingRows = storageRows.filter(function (row) { return row.closing_balance_tj != null; });
+    Plotly.newPlot('gas-storage-chart', [
+      {
+        x: cushionRows.map(function (row) { return row.date; }),
+        y: cushionRows.map(function (row) { return row.cushion_gas_tj; }),
+        name: 'Published cushion gas', type: 'scatter', mode: 'lines',
+        line: { color: '#718096', width: 1, dash: 'dot' },
+        hovertemplate: '<b>Cushion gas</b><br>%{x}<br>%{y:.1f} TJ<extra></extra>',
+      },
+      {
+        x: closingRows.map(function (row) { return row.date; }),
+        y: closingRows.map(function (row) { return row.closing_balance_tj; }),
+        name: 'Closing balance', type: 'scatter', mode: 'lines', fill: 'tonexty',
+        fillcolor: 'rgba(49,130,206,0.12)', line: { color: '#3182ce', width: 2 },
+        hovertemplate: '<b>Closing balance</b><br>%{x}<br>%{y:.1f} TJ<extra></extra>',
+      },
+    ], {
+      margin: { l: 58, r: 16, t: 28, b: 42 },
+      title: { text: 'Ahuroa daily storage balance', font: { size: 12 }, x: 0.02 },
+      paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
+      font: { family: 'Inter, sans-serif', size: 10, color: '#4a5568' },
+      xaxis: { gridcolor: '#edf2f7', tickfont: { size: 9 } },
+      yaxis: { title: 'TJ', gridcolor: '#edf2f7', fixedrange: true },
+      legend: { orientation: 'h', y: 1.18, font: { size: 9 } },
+      hovermode: 'x unified',
+    }, { responsive: true, displayModeBar: false });
+  } else {
+    setEmptyState('gas-storage-chart', 'No daily Ahuroa storage observations.');
+  }
+
+  var caveats = (production.caveats || []).concat(storage.caveats || []);
+  metaEl.textContent = (context.model_usage || '') + (caveats.length ? ' ' + caveats.join(' ') : '');
 }
 
 function renderDomesticSupplyChain(fuel) {
@@ -3355,6 +3549,104 @@ function renderScenarioProjections(fuel) {
   }
 }
 
+function renderFuelABM(abm) {
+  var publication = (abm || {}).publication || {};
+  var statusEl = document.getElementById('fuel-abm-status');
+  var contentEl = document.getElementById('fuel-abm-content');
+  var metaEl = document.getElementById('fuel-abm-meta');
+  if (!statusEl || !contentEl) return;
+
+  if (!publication.is_publishable) {
+    var reasons = publication.reasons || ['No approved historical holdout validation is available.'];
+    statusEl.textContent = 'Not published: ' + reasons.join(' ');
+    contentEl.style.display = 'none';
+    if (metaEl) metaEl.textContent = 'Quarantined • ' + (publication.state || 'unavailable');
+    return;
+  }
+
+  var scenarios = abm.scenarios || {};
+  var order = ['status_quo', 'partial_reopening', 'full_reopening', 'compound_chokepoint', 'supply_competition', 'stop_start_reopening'];
+  var colors = {
+    status_quo: '#e53e3e', partial_reopening: '#ed8936', full_reopening: '#48bb78',
+    compound_chokepoint: '#9b2c2c', supply_competition: '#805ad5', stop_start_reopening: '#3182ce'
+  };
+  statusEl.style.display = 'none';
+  contentEl.style.display = 'block';
+  if (metaEl) {
+    metaEl.textContent = 'Validated holdout • ' + (abm.ensemble_size_per_scenario || '—') + ' runs/scenario • as of ' + (abm.as_of_date || '—');
+  }
+
+  function render(fuelType) {
+    var traces = [];
+    order.forEach(function (key) {
+      var scenario = scenarios[key];
+      if (!scenario || !scenario.daily) return;
+      var x = scenario.daily.map(function (row) { return row.date; });
+      var median = scenario.daily.map(function (row) { return row.fuels[fuelType].effective_cover_days.p50; });
+      if (key === 'status_quo') {
+        traces.push({
+          x: x, y: scenario.daily.map(function (row) { return row.fuels[fuelType].effective_cover_days.p90; }),
+          type: 'scatter', mode: 'lines', line: { width: 0 }, showlegend: false, hoverinfo: 'skip'
+        });
+        traces.push({
+          x: x, y: scenario.daily.map(function (row) { return row.fuels[fuelType].effective_cover_days.p10; }),
+          type: 'scatter', mode: 'lines', line: { width: 0 }, fill: 'tonexty',
+          fillcolor: 'rgba(229,62,62,0.10)', name: 'Status quo p10–p90', hoverinfo: 'skip'
+        });
+      }
+      traces.push({
+        x: x, y: median, type: 'scatter', mode: 'lines', name: scenario.scenario_label,
+        line: { color: colors[key], width: key === 'status_quo' ? 3 : 2 },
+        hovertemplate: '<b>' + scenario.scenario_label + '</b><br>%{y:.1f} effective days<br>%{x}<extra></extra>'
+      });
+    });
+    traces.push({
+      x: [abm.as_of_date, new Date(new Date(abm.as_of_date + 'T00:00:00Z').getTime() + abm.horizon_days * 86400000).toISOString().slice(0, 10)],
+      y: [14, 14], type: 'scatter', mode: 'lines', name: 'Operational pressure (14d)',
+      line: { color: '#e53e3e', width: 1, dash: 'dot' }, hoverinfo: 'skip'
+    });
+    Plotly.newPlot('fuel-abm-chart', traces, {
+      margin: { t: 10, r: 20, b: 46, l: 50 },
+      xaxis: { gridcolor: '#edf2f7' },
+      yaxis: { title: 'Effective cover (days)', gridcolor: '#edf2f7', rangemode: 'tozero' },
+      legend: { orientation: 'h', y: -0.18, x: 0.5, xanchor: 'center', font: { size: 10 } },
+      plot_bgcolor: 'transparent', paper_bgcolor: 'transparent', hovermode: 'x unified'
+    }, { responsive: true, displayModeBar: false });
+
+    var wrap = document.getElementById('fuel-abm-comparison');
+    if (!wrap) return;
+    var table = el('table', { class: 'cascade-table' });
+    var thead = el('thead');
+    var hr = el('tr');
+    ['Scenario', 'Conditional chance of <14d', 'Median first pressure date', 'Median cumulative unmet demand-days'].forEach(function (heading) {
+      hr.appendChild(el('th', null, heading));
+    });
+    thead.appendChild(hr); table.appendChild(thead);
+    var tbody = el('tbody');
+    order.forEach(function (key) {
+      var scenario = scenarios[key];
+      if (!scenario) return;
+      var probability = ((scenario.pressure_probability || {})[fuelType] || 0) * 100;
+      var first = (((scenario.first_pressure_date || {})[fuelType] || {}).p50) || 'Not reached';
+      var unmet = (((scenario.cumulative_unmet || {})[fuelType] || {}).p50);
+      var row = el('tr');
+      row.appendChild(el('td', { style: 'font-weight:500' }, scenario.scenario_label));
+      row.appendChild(el('td', { class: 'mono' }, probability.toFixed(1) + '%'));
+      row.appendChild(el('td', null, first));
+      row.appendChild(el('td', { class: 'mono' }, unmet == null ? '—' : Number(unmet).toFixed(1)));
+      tbody.appendChild(row);
+    });
+    table.appendChild(tbody); wrap.textContent = ''; wrap.appendChild(table);
+  }
+
+  var selector = document.getElementById('fuel-abm-fuel-select');
+  if (selector && !selector.dataset.bound) {
+    selector.addEventListener('change', function () { render(this.value); });
+    selector.dataset.bound = 'true';
+  }
+  render(selector ? selector.value : 'diesel');
+}
+
 function renderFuelMaritimeChart(maritime) {
   var rows = Object.keys((maritime || {}).chokepoints || {}).map(function (key) {
     var point = maritime.chokepoints[key];
@@ -3558,9 +3850,11 @@ window.switchTab = function switchTab(tab) {
     requestAnimationFrame(function () {
       var fpc = document.getElementById('fuel-price-chart');
       var fhc = document.getElementById('fuel-hormuz-chart');
+      var fabm = document.getElementById('fuel-abm-chart');
       var rbc = document.getElementById('retail-basket-chart');
       if (fpc && fpc.data) Plotly.Plots.resize(fpc);
       if (fhc && fhc.data) Plotly.Plots.resize(fhc);
+      if (fabm && fabm.data) Plotly.Plots.resize(fabm);
       if (rbc && rbc.data) Plotly.Plots.resize(rbc);
     });
   }

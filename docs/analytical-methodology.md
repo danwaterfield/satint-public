@@ -60,6 +60,10 @@ The generic `ExternalIndicatorObservation` envelope supports future humanitarian
 
 These remain planned corroborating sources rather than zeros or inferred evidence.
 
+## Adaptive maritime-fuel model
+
+The deterministic fuel paths are supplemented by a representative-agent model of refiners, importers, shipments, competing buyers, demand sectors, and a rule-based reserve release. Its scenario frequencies are conditional sensitivity results, not probabilities assigned to geopolitical events. The public exporter withholds the complete ensemble unless point-in-time input coverage, mass conservation, naive-benchmark performance, holdout error, and interval-coverage gates pass, followed by explicit operator approval. See the [full model protocol](agent-based-fuel-model.md).
+
 ## Operator commands
 
 Run the full refresh with:
