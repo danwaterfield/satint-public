@@ -1294,9 +1294,13 @@ var EVENT_ANNOTATIONS = [
 
 var NZ_CITIES = ['Auckland', 'Queenstown'];
 var CONTROL_CITIES = ['Mumbai', 'Karachi', 'Singapore'];
+var GULF_CITIES = [
+  'Tehran', 'Dubai', 'Doha', 'Kuwait City', 'Riyadh',
+  'Abu Dhabi', 'Manama', 'Isfahan', 'Basra',
+];
 
 function isGulfCity(name) {
-  return NZ_CITIES.indexOf(name) === -1 && CONTROL_CITIES.indexOf(name) === -1;
+  return GULF_CITIES.indexOf(name) !== -1;
 }
 
 function eventsWithinDates(dates) {
@@ -1335,8 +1339,61 @@ var CITY_COLORS = {
   'Manama': '#319795', 'Isfahan': '#e53e3e', 'Basra': '#718096',
 };
 
+function renderProvisionalNightlightHero(provisionalData) {
+  var traces = [];
+  var latestDate = null;
+
+  GULF_CITIES.forEach(function (city) {
+    var series = (provisionalData[city] || []).filter(function (row) {
+      return row && row.date && row.mean_radiance != null;
+    });
+    if (!series.length) return;
+
+    series.forEach(function (row) {
+      if (!latestDate || row.date > latestDate) latestDate = row.date;
+    });
+    traces.push({
+      x: series.map(function (row) { return row.date; }),
+      y: series.map(function (row) { return row.mean_radiance; }),
+      customdata: series.map(function (row) {
+        return [row.observation_state || 'partial', row.valid_pixel_count];
+      }),
+      type: 'scatter', mode: 'markers',
+      name: city,
+      marker: { color: CITY_COLORS[city] || '#718096', size: 5 },
+      hovertemplate: city + '<br>%{x}<br>Raw radiance %{y:.3f} nW/cm²/sr<br>' +
+        '%{customdata[0]} observation · n=%{customdata[1]}<extra></extra>',
+    });
+  });
+
+  if (!traces.length) return false;
+
+  var days = Math.max(0, Math.floor(
+    (Date.now() - new Date(latestDate + 'T00:00:00Z').getTime()) / 86400000
+  ));
+  setText(
+    'nl-hero-freshness',
+    'Provisional VIIRS DNB L1B (partial) · no VNP46A2 baseline comparison · ' +
+      'lunar/straylight correction unavailable · latest ' + latestDate + ' (' + days + 'd ago)'
+  );
+
+  Plotly.newPlot('nightlight-hero-chart', traces, {
+    margin: { t: 20, r: 20, b: 40, l: 70 },
+    font: { family: 'Inter, system-ui, sans-serif', size: 11, color: '#4a5568' },
+    paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
+    legend: { orientation: 'h', x: 0, y: 1.12, font: { size: 10 } },
+    xaxis: { type: 'date', showgrid: false, tickfont: { size: 10 } },
+    yaxis: {
+      title: 'Raw DNB radiance (nW/cm²/sr)', showgrid: true, gridcolor: '#edf2f7',
+      titlefont: { size: 10 }, rangemode: 'tozero',
+    },
+    hovermode: 'closest',
+  }, { responsive: true, displayModeBar: false });
+  return true;
+}
+
 // ── nightlight hero chart (all Gulf cities overlaid) ─────────────────────────
-function renderNightlightHero(nlAllData) {
+function renderNightlightHero(nlAllData, provisionalData) {
   var traces = [];
   var chartDates = [];
   var gulfCities = Object.keys(nlAllData).filter(isGulfCity).sort();
@@ -1357,9 +1414,10 @@ function renderNightlightHero(nlAllData) {
   });
 
   if (!traces.length) {
+    if (renderProvisionalNightlightHero(provisionalData || {})) return;
     setEmptyState(
       'nightlight-hero-chart',
-      'No quality-screened VNP46A2 observations are available in this export.'
+      'No quality-screened VNP46A2 or provisional DNB observations are available in this export.'
     );
     setText('nl-hero-freshness', 'Verified observation unavailable');
     return;
@@ -2335,12 +2393,13 @@ Promise.all([
   loadOptional(DATA + '/fires.json', {}),
   loadOptional(DATA + '/vegetation.json', { regions: {}, latest: {} }),
   loadOptional(DATA + '/analytical_lenses.json', {}),
+  loadOptional(DATA + '/nightlights_provisional.json', {}),
 ]).then(function (results) {
   var nl = results[0] || {}, risk = results[1] || {}, sar = results[2] || {},
       fireGeo = results[3] || { features: [] }, infraFires = results[4] || [], meta = results[5] || {},
       inet = results[6] || {}, thermalSigs = results[7] || {}, flightData = results[8] || {},
       fireTimeSeries = results[9] || {}, vegetation = results[10] || { regions: {}, latest: {} },
-      analyticalLenses = results[11] || {};
+      analyticalLenses = results[11] || {}, provisionalNightlights = results[12] || {};
 
   // Build per-city data structure for chart
   Object.keys(nl).forEach(function (city) {
@@ -2412,7 +2471,7 @@ Promise.all([
   renderRisk(risk);
   renderNLTable(nl);
   initCitySelect(Object.keys(nl).sort());
-  renderNightlightHero(nlData);
+  renderNightlightHero(nlData, provisionalNightlights);
   renderVesselTable(sar);
   renderMap(fireGeo);
   renderFireTable(infraFires);
