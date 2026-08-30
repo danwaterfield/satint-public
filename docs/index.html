@@ -2802,7 +2802,8 @@ function loadFuelData() {
   renderFuelSecurity(fuel);
   renderScenarioProjections(fuel);
   renderUpstreamIndicators(fuel);
-}).catch(function () {
+}).catch(function (err) {
+  console.error('Fuel security data failed to render:', err);
   fuelDataLoaded = false;
   var cards = document.getElementById('fuel-stock-cards');
   if (cards) {

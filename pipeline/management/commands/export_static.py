@@ -84,7 +84,13 @@ class Command(BaseCommand):
 
     def _write(self, path, data):
         with open(path, "w") as f:
-            json.dump(data, f, separators=(",", ":"), default=str)
+            json.dump(
+                data,
+                f,
+                separators=(",", ":"),
+                default=str,
+                allow_nan=False,
+            )
         self.stdout.write(f"  wrote {path}")
 
     def _export_meta(self, out_dir):

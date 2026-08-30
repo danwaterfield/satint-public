@@ -8,6 +8,7 @@ daily Brent crude, heating oil, RBOB gasoline, and FX reference series.
 from __future__ import annotations
 
 import logging
+import math
 from bisect import bisect_right
 from datetime import date, timedelta
 
@@ -40,7 +41,7 @@ def _fetch_history(symbol: str, start_date: date, end_date: date):
 
 
 def _mean(values):
-    values = [v for v in values if v is not None]
+    values = [v for v in values if v is not None and math.isfinite(float(v))]
     return sum(values) / len(values) if values else None
 
 
@@ -76,16 +77,19 @@ def fetch_upstream_market_reference(
     fx_series = []
     for idx, row in histories["nzdusd"].iterrows():
         usd_per_nzd = row.get("Close")
-        if usd_per_nzd in (None, 0):
+        if usd_per_nzd is None:
+            continue
+        usd_per_nzd = float(usd_per_nzd)
+        if not math.isfinite(usd_per_nzd) or usd_per_nzd <= 0:
             continue
         d = idx.date().isoformat()
-        nzd_per_usd = float(1.0 / usd_per_nzd)
+        nzd_per_usd = 1.0 / usd_per_nzd
         fx_dates.append(d)
         fx_nzd_per_usd.append(nzd_per_usd)
         fx_series.append({
             "date": d,
             "rate": round(nzd_per_usd, 4),
-            "usd_per_nzd": round(float(usd_per_nzd), 6),
+            "usd_per_nzd": round(usd_per_nzd, 6),
         })
 
     if not fx_dates:
@@ -124,13 +128,16 @@ def fetch_upstream_market_reference(
             close_usd = row.get("Close")
             if close_usd is None:
                 continue
+            close_usd = float(close_usd)
+            if not math.isfinite(close_usd):
+                continue
             d = idx.date().isoformat()
             nzd_per_usd = fx_for_date(d)
             if nzd_per_usd is None:
                 continue
             series.append({
                 "date": d,
-                "close_usd": round(float(close_usd), 4),
+                "close_usd": round(close_usd, 4),
                 "nzd_litre": round(convert_to_nzd_litre(close_usd, unit, nzd_per_usd), 4),
             })
         result[key] = series
