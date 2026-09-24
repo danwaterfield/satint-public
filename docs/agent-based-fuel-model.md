@@ -1,7 +1,7 @@
 # Agent-based maritime fuel model
 
-**Model version:** `nz-maritime-fuel-abm-v1.3.0`  
-**Purpose:** explore conditional second- and third-order effects of the Iran crisis on New Zealand's refined-fuel supply.  
+**Model version:** `nz-maritime-fuel-abm-v1.4.0`
+**Purpose:** explore conditional second- and third-order effects of the Iran crisis on New Zealand's refined-fuel supply.
 **Status:** experimental until the historical holdout gates pass and an operator explicitly approves publication.
 
 This is a decision-support model, not a prediction of political or military events. It asks a narrower question: *if a stated chokepoint and market scenario occurs, how might adaptive decisions by refiners, importers, competing buyers, demand sectors, and government change New Zealand's physical fuel cover?*
@@ -87,42 +87,56 @@ Transit gaps are bounded. A directly observed value may be carried forward for a
 
 Uncertain behavioural and operational parameters are sampled from bounded triangular distributions. Bounds, defaults, source labels, confidence labels, and calibration roles live in the parameter registry. Seeds are explicit and deterministic: rerunning the same version, snapshot, parameter set, scenario, and seed produces the same result. Different seeds vary cargo voyage times, latent product-cohort sizes, and the number of product cohorts within each published shipping zone. Reported tanker counts cap the possible timing slots; they no longer imply that every reported ship carries every fuel. Cargo batching prevents variation from being averaged across implausibly tiny daily shipments, while the published aggregate on-water stock remains exactly conserved.
 
-Reported bands are empirical ensemble quantiles (`p10`, `p50`, `p90`). They express model and parameter uncertainty inside the chosen scenario. They do not include every form of structural, political, measurement, or surprise-event uncertainty.
+The output now keeps two layers separate:
+
+- **raw process paths** are the physically conserved ABM runs; and
+- **observable forecasts** shrink the raw change towards the latest published stock state by a weight learned after parameter selection, then widen the onshore P10–P90 interval using cross-fitted historical residuals.
+
+Version 1.4 retains 30% of the simulated stock change. That is an empirical correction, not a physical flow. Conservation therefore applies to the raw paths, and both layers remain visible in private output. Reported bands still omit political and structural surprises outside the scenario design.
 
 ## Historical calibration and validation
 
-Backtesting preserves the time boundary:
+Backtesting now uses four distinct roles for history:
 
-- the model starts from the stock snapshot available on the historical start date;
-- later transit observations form an explicitly labelled *observed conditioning path* and are not allowed into the initial snapshot;
-- stock observations through the calibration cutoff jointly score onshore (60%), on-water (30%), and total (10%) stock-system error;
-- the observed stock and pipeline state at the calibration cutoff is assimilated as the information set that a real forecast would possess; and
-- later stock observations are held out for validation and never used to choose parameters or mechanisms.
+1. **Parameter fitting (8 March–3 May):** 120 candidate parameter sets are scored from four rolling origins, each forecasting no more than 21 days. The score combines onshore (60%), on-water (30%), and total (10%) error.
+2. **Forecast calibration (6–31 May):** the retained parameter sets are frozen. Publication-date leave-one-out cross-fitting estimates how much of the simulated stock change to retain and constructs empirical interval residuals without scoring a release using a correction trained on that same release.
+3. **Fixed holdout (3 June–19 July):** one forecast from the 31 May observed state is compared with four predeclared baselines.
+4. **Rolling-origin audit:** four 14-day forecasts are reinitialised on 31 May, 14 June, 28 June, and 12 July to test the way the model would operate as new releases arrive.
+
+Later transit observations remain an explicitly labelled *observed conditioning path*. They are never allowed into an earlier input snapshot. The fixed holdout is unchanged from the previous repair work, but it should no longer be called untouched: it has now informed several development rounds.
 
 Candidate sets are retained by history matching rather than collapsed into one apparently precise optimum. A run becomes technically publishable only when all of these gates pass:
 
-1. holdout mean absolute error is at most five stock-cover days;
-2. at least 70% of held-out targets fall inside the model's 80% ensemble interval;
-3. retained calibration stock-system MAE is at most five days;
-4. the model achieves at least 5% skill over naive persistence from the holdout-boundary stock observation;
-5. the daily stock-flow mass-conservation error remains below `1e-7`; and
-6. the current input snapshot meets the model's data-coverage gate.
+1. fixed-holdout onshore and weighted stock-system MAE are each at most five days;
+2. at least 70% of held-out onshore targets fall inside the calibrated nominal 80% interval;
+3. mean calibrated interval width is at most 16 days, so coverage cannot be bought with an unbounded interval;
+4. rolling parameter-fit stock-system MAE is at most five days;
+5. the observable forecast achieves at least 5% skill over the strongest of persistence, recent-three median, damped robust trend, and four-week cycle baselines on both fixed-holdout targets;
+6. the same +5% benchmark-skill requirement passes in at least three rolling-origin folds;
+7. the historical record contains as-known publication vintages rather than only a later retrospective archive;
+8. daily raw-path mass-conservation error remains below `1e-7`; and
+9. the current input snapshot meets the data-coverage gate.
 
 Passing those checks is still not sufficient to publish. The command also requires an explicit `--publish` approval. Failed, insufficient, and merely unapproved results stay quarantined from the public scenario payload.
 
 ### Current historical result
 
-The unchanged 1 June–19 July holdout still rejects version 1.3.0. Across 120 candidate sets, 12 retained parameter sets, and three voyage-time replicates per set:
+Version 1.4.0 remains rejected. Across 120 candidate sets, 12 retained sets, and three stochastic replicates per set:
 
-- calibration stock-system MAE: **4.9243 days** (passes the five-day gate);
-- holdout onshore-stock MAE: **2.7095 days** (passes the five-day absolute-error gate but is worse than persistence);
-- 80% interval coverage: **50.0%** (up from 41.67% in version 1.2.0, but still below the 70% gate);
-- 31 May persistence MAE: **2.2667 days**, giving the model **−19.54% persistence skill** (fails the new +5% gate); and
-- maximum absolute mass-conservation error: **1.03e-12** (passes).
+- rolling parameter-fit stock-system MAE: **5.5116 days** (fails the five-day fit gate);
+- raw fixed-holdout onshore MAE: **2.5448 days**;
+- observable fixed-holdout onshore MAE: **2.2848 days**, versus **2.1638** for the best onshore baseline (**−5.6% skill**);
+- observable stock-system MAE: **3.1928 days**, versus **3.0872** for the best system baseline (**−3.4% skill**);
+- raw nominal-80% coverage: **50.0%** at **5.1542 days** mean width;
+- calibrated nominal-80% coverage: **97.22%** at **10.2517 days** mean width;
+- rolling-origin onshore/system skill: **−14.92% / −5.89%**; and
+- maximum raw-path conservation error: **9.66e-13** (passes).
 
-Version 1.3.0 is structurally more honest but not more accurate at the median: it removes the implicit assumption that every reported tanker supplies every product, which widens the ensemble towards the observed cargo-cycle variability, but petrol/diesel/jet product assignment and discharge timing remain unidentified. That is a reason to keep the ensemble quarantined, not to narrow the intervals or weaken the benchmark.
+The correction retains **30%** of the simulated stock change; leave-one-publication-date-out weights range from **0% to 37%**. The uncertainty repair is therefore useful but conservative, and it does not create predictive skill.
 
-Accordingly, the model remains experimental and is not exported to the public dashboard. The reproducible repair result is stored in `analysis/historical_miss_repair_validation.json`; the earlier diagnostic is retained as the version 1.0.0 failure record.
+The provenance gate also fails. All retrospective stock observations used here are preserved from one 29 July archive and source hash. They are official historical values, but the project cannot yet demonstrate that each value is the exact, unrevised information available at each historical forecast origin. Prospective shadow validation is required.
+
+Accordingly, the model remains experimental and is not exported to the public dashboard. The reproducible v1.4 bundle is stored in `analysis/model_validation_v140.json`, with long-form holdout and ablation CSVs and an executed notebook under `output/jupyter-notebook/`. Earlier diagnostic and repair artifacts remain as versioned failure records.
 
 ## Operation
 

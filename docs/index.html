@@ -3618,9 +3618,48 @@ function renderFuelABM(abm) {
 
   if (!publication.is_publishable) {
     var reasons = publication.reasons || ['No approved historical holdout validation is available.'];
-    statusEl.textContent = 'Not published: ' + reasons.join(' ');
+    statusEl.textContent = '';
+    statusEl.appendChild(el('p', { style: 'margin:0 0 8px' }, 'Not published: ' + reasons.join(' ')));
+    var latest = (abm || {}).latest_experimental_run || {};
+    var validation = latest.validation_summary || {};
+    if (latest.model_version) {
+      var details = el('div', { style: 'font-size:12px;line-height:1.65;text-align:left;max-width:900px;margin:0 auto' });
+      var fixedSkill = validation.benchmark_skill_score;
+      var systemSkill = validation.benchmark_system_skill_score;
+      var coverage = validation.interval_coverage_80;
+      var rolling = validation.rolling_origin_audit || {};
+      details.appendChild(el('div', null,
+        'Latest private validation: ' + latest.model_version +
+        (latest.as_of_date ? ' • run as of ' + latest.as_of_date : '') + '.'));
+      if (validation.validation_mae_days != null && validation.best_benchmark_mae_days != null) {
+        details.appendChild(el('div', null,
+          'Fixed holdout: ' + validation.validation_mae_days.toFixed(2) +
+          ' onshore MAE days versus ' + validation.best_benchmark_mae_days.toFixed(2) +
+          ' for ' + String(validation.best_onshore_benchmark || 'the best baseline').replace(/_/g, ' ') +
+          (fixedSkill != null ? ' (' + (fixedSkill * 100).toFixed(1) + '% skill).' : '.')));
+      }
+      if (validation.validation_system_mae_days != null && validation.best_benchmark_system_mae_days != null) {
+        details.appendChild(el('div', null,
+          'Weighted stock system: ' + validation.validation_system_mae_days.toFixed(2) +
+          ' versus ' + validation.best_benchmark_system_mae_days.toFixed(2) +
+          (systemSkill != null ? ' (' + (systemSkill * 100).toFixed(1) + '% skill).' : '.')));
+      }
+      if (coverage != null) {
+        details.appendChild(el('div', null,
+          'Nominal 80% interval: ' + (coverage * 100).toFixed(1) + '% empirical coverage' +
+          (validation.interval_mean_width_days != null ? ' at ' + validation.interval_mean_width_days.toFixed(2) + ' mean days wide.' : '.')));
+      }
+      if (rolling.onshore_skill_score != null) {
+        details.appendChild(el('div', null,
+          'Four-fold 14-day rolling audit: ' + (rolling.onshore_skill_score * 100).toFixed(1) +
+          '% onshore skill; provenance gate ' + (validation.provenance_gate_passed ? 'passed.' : 'failed.')));
+      }
+      var methodLink = el('a', { href: 'agent-based-fuel-model.md', style: 'display:inline-block;margin-top:5px' }, 'Validation method and full limitations');
+      details.appendChild(methodLink);
+      statusEl.appendChild(details);
+    }
     contentEl.style.display = 'none';
-    if (metaEl) metaEl.textContent = 'Quarantined • ' + (publication.state || 'unavailable');
+    if (metaEl) metaEl.textContent = 'Quarantined • ' + (latest.model_version || publication.state || 'unavailable');
     return;
   }
 
