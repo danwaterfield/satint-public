@@ -431,7 +431,7 @@
     <div class="stat-card">
       <div class="stat-label">Cities Monitored</div>
       <div class="stat-value green" id="stat-nl">—</div>
-      <div class="stat-sub" id="stat-nl-sub">Verified VNP46A2 observations</div>
+      <div class="stat-sub" id="stat-nl-sub">Verified Black Marble observations</div>
     </div>
     <div class="stat-card">
       <div class="stat-label">Persistent Thermal Evidence</div>
@@ -697,7 +697,7 @@
   <div class="card">
     <div class="section-header">
       <span class="section-title">Airport Flight Activity</span>
-      <span class="section-meta">OpenSky ADS-B — missing coverage is shown separately from an observed zero</span>
+      <span class="section-meta">OpenSky and official airport boards — partial schedules and missing coverage are labelled</span>
     </div>
     <div style="margin-bottom:12px">
       <label for="flight-airport-select" style="font-size:13px;color:var(--slate-lt);margin-right:8px">Airport:</label>
@@ -784,7 +784,7 @@
         <table style="font-size:11px;">
           <tr><th>Source</th><th>Update Freq.</th><th>Resolution</th><th>Access</th></tr>
           <tr><td>NASA FIRMS (VIIRS active fires)</td><td>4-hourly</td><td>375m</td><td>Free</td></tr>
-          <tr><td>NASA Black Marble VNP46A2</td><td>Daily (11-day lag)</td><td>500m</td><td>Free</td></tr>
+          <tr><td>NASA Black Marble VNP46A2 / VJ146A2</td><td>Daily (11-day lag)</td><td>500m</td><td>Free</td></tr>
           <tr><td>VIIRS DNB L1B swaths</td><td>Daily (~3h lag)</td><td>750m</td><td>Free</td></tr>
           <tr><td>Sentinel-1 SAR</td><td>6-day revisit</td><td>10m</td><td>Free</td></tr>
           <tr><td>NASA HLS / Sentinel-2 NDVI</td><td>5-day revisit</td><td>10&ndash;30m</td><td>Free</td></tr>
@@ -804,7 +804,7 @@
           <li><strong>Counterfactual order:</strong> same-season prior years, then a date-matched control, then a robust pre-event median. The selected method and sample count travel with every estimate.</li>
           <li><strong>Legacy compound index:</strong> retained for continuity while the layered model is validated; correlated inputs should be interpreted through the new evidence-family grouping.</li>
           <li><strong>DNB L1B caveat:</strong> No lunar illumination or straylight correction &mdash; absolute values less reliable than relative day-to-day trends</li>
-          <li><strong>Nightlight quality:</strong> VNP46A2 Mandatory Quality Flag 0 pixels only; cloud-affected or thin observations are marked partial.</li>
+          <li><strong>Nightlight quality:</strong> Black Marble Mandatory Quality Flag 0 pixels only; cloud-affected or thin observations are marked partial.</li>
           <li><strong>Ramadan caveat:</strong> The 15 Jan–27 Feb baseline includes Ramadan from mid-February. Future baselines should stratify pre-Ramadan and Ramadan behavior.</li>
           <li><strong>Infrastructure evidence:</strong> FIRMS thermal anomalies near a facility are proximity evidence only. A detection does not establish cause or damage; an absence cannot distinguish normal operations from source-coverage and detection limits.</li>
         </ul>
@@ -1205,7 +1205,7 @@
 </main>
 
 <footer class="footer">
-  <span>Data: NASA FIRMS &bull; NASA Black Marble VNP46A2 &bull; VIIRS DNB L1B &bull; Sentinel-1 SAR via ASF DAAC &bull; IODA / Georgia Tech &bull; MBIE NZ Fuel Monitoring &bull; Gas Industry Company NZ &bull; Woolworths NZ public basket &bull; POAL / Port of Tauranga schedules</span>
+  <span>Data: NASA FIRMS &bull; NASA Black Marble VNP46A2 / VJ146A2 &bull; VIIRS DNB L1B &bull; Sentinel-1 SAR via ASF DAAC &bull; IODA / Georgia Tech &bull; MBIE NZ Fuel Monitoring &bull; Gas Industry Company NZ &bull; Woolworths NZ public basket &bull; POAL / Port of Tauranga schedules</span>
   <span id="footer-right">Baseline period: 15 Jan – 27 Feb 2026</span>
 </footer>
 
@@ -1373,7 +1373,7 @@ function renderProvisionalNightlightHero(provisionalData) {
   ));
   setText(
     'nl-hero-freshness',
-    'Provisional VIIRS DNB L1B (partial) · no VNP46A2 baseline comparison · ' +
+    'Provisional VIIRS DNB L1B (partial) · no corrected Black Marble baseline comparison · ' +
       'lunar/straylight correction unavailable · latest ' + latestDate + ' (' + days + 'd ago)'
   );
 
@@ -1417,7 +1417,7 @@ function renderNightlightHero(nlAllData, provisionalData) {
     if (renderProvisionalNightlightHero(provisionalData || {})) return;
     setEmptyState(
       'nightlight-hero-chart',
-      'No quality-screened VNP46A2 or provisional DNB observations are available in this export.'
+      'No quality-screened Black Marble or provisional DNB observations are available in this export.'
     );
     setText('nl-hero-freshness', 'Verified observation unavailable');
     return;
@@ -1599,7 +1599,7 @@ function renderNightlightChart(cityName) {
     paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
     legend: { x: 0, y: 1.1, orientation: 'h', font: { size: 10 } },
     xaxis: { showgrid: false, tickfont: { size: 10 } },
-    yaxis: { title: '% Change from VNP46A2 Baseline', showgrid: true, gridcolor: '#edf2f7', titlefont: { size: 10 }, automargin: true },
+    yaxis: { title: '% Change from Same-Product Baseline', showgrid: true, gridcolor: '#edf2f7', titlefont: { size: 10 }, automargin: true },
     shapes: shapes,
     annotations: [],
   }, { responsive: true, displayModeBar: false });
@@ -1900,10 +1900,10 @@ function renderNLTable(nlAllData) {
   cities = cities.filter(isGulfCity);
   if (!cities.length) {
     var row = el('tr');
-    row.appendChild(el('td', { colspan: '4', class: 'empty-state' }, 'No quality-screened VNP46A2 observations.'));
+    row.appendChild(el('td', { colspan: '4', class: 'empty-state' }, 'No quality-screened Black Marble observations.'));
     tbody.appendChild(row);
     setText('stat-nl', '0');
-    setText('stat-nl-sub', 'No verified VNP46A2 rows');
+    setText('stat-nl-sub', 'No verified Black Marble rows');
     return;
   }
 
@@ -1947,7 +1947,7 @@ function renderNLTable(nlAllData) {
   });
 
   setText('stat-nl', String(rows.length));
-  setText('stat-nl-sub', 'Cities with verified VNP46A2 rows');
+  setText('stat-nl-sub', 'Cities with verified Black Marble rows');
 }
 
 // ── vessel table ──────────────────────────────────────────────────────────────
